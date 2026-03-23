@@ -29,8 +29,25 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
+## Environment Variables
+
+The following environment variables are required for the AI scheduling features to work:
+
+- `OPENROUTER_API_KEY`: Your OpenRouter API key.
+- `AI_MODEL` (Optional): The AI model to use (defaults to `openai/gpt-4o-mini`).
+
+You can find a template in `.env.example`.
+
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme).
+
+### Deployment Steps
+
+1. Push your code to a GitHub, GitLab, or Bitbucket repository.
+2. Import your project into Vercel.
+3. In the "Environment Variables" section of the Vercel project settings, add the following:
+   - `OPENROUTER_API_KEY`: Your OpenRouter API key.
+4. Click **Deploy**.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
