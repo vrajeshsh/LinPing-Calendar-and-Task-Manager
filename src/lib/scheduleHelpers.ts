@@ -1,6 +1,16 @@
 import { TimeBlock } from '@/types';
 import { parse, isBefore, isAfter } from 'date-fns';
 
+/** Convert "HH:mm" 24h → "h:mm AM/PM" */
+export function formatTime12h(time: string): string {
+  const [hStr, mStr] = time.split(':');
+  let h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  const period = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${String(m).padStart(2, '0')} ${period}`;
+}
+
 export function parseTime(time: string): Date {
   return parse(time, 'HH:mm', new Date());
 }

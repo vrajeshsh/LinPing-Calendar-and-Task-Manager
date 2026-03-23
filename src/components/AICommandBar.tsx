@@ -50,31 +50,35 @@ export function AICommandBar() {
   };
 
   return (
-    <div className="fixed bottom-20 md:bottom-8 left-4 right-4 md:left-auto md:right-8 lg:left-1/2 lg:-translate-x-1/2 md:w-[600px] z-50">
+    <div className="fixed bottom-24 md:bottom-10 left-4 right-4 md:left-auto md:right-auto md:w-[700px] z-50 md:left-1/2 md:-translate-x-1/2">
       <form 
         onSubmit={handleSubmit}
-        className="relative flex items-center bg-card/90 backdrop-blur-2xl border border-border/80 shadow-2xl rounded-2xl p-2 transition-all focus-within:ring-4 focus-within:ring-primary/10 focus-within:border-primary/30"
+        className="relative flex items-center bg-card/95 backdrop-blur-3xl border border-border shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.5)] rounded-2xl p-2.5 transition-all duration-300 focus-within:ring-4 focus-within:ring-primary/20 focus-within:border-primary/50 hover:border-border/80"
       >
-        <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-primary/10 text-primary mr-2 shrink-0 animate-in fade-in duration-500">
-          <Sparkles className="w-5 h-5" />
+        <div className="flex items-center justify-center w-12 h-12 rounded-[14px] bg-primary/10 text-primary mr-3 shrink-0 animate-in fade-in zoom-in duration-500">
+          <Sparkles className="w-[22px] h-[22px]" />
         </div>
         <input 
           type="text"
           value={prompt}
           onChange={e => setPrompt(e.target.value)}
-          placeholder="Ask AI to adjust schedule, add block..."
-          className="flex-1 bg-transparent border-none focus:outline-none text-[15px] font-medium placeholder:text-muted-foreground/60 placeholder:font-normal h-full w-full"
+          placeholder="Add 30 min walk after dinner..."
+          className="flex-1 bg-transparent border-none focus:outline-none text-[17px] font-medium placeholder:text-muted-foreground/50 placeholder:font-normal h-full w-full"
           disabled={loading}
+          autoFocus
         />
+        <div className="hidden md:flex items-center justify-center px-2 mr-2 text-[11px] font-bold text-muted-foreground bg-muted/50 rounded-md border border-border/50">
+          ⌘ K
+        </div>
         <button 
           type="submit" 
           disabled={!prompt.trim() || loading}
-          className="w-11 h-11 flex items-center justify-center rounded-xl bg-primary text-primary-foreground disabled:opacity-40 transition-colors shrink-0 ml-2"
+          className="w-12 h-12 flex items-center justify-center rounded-[14px] bg-primary text-primary-foreground disabled:opacity-40 transition-all hover:brightness-110 active:scale-95 shrink-0 shadow-sm"
         >
           {loading ? (
-             <div className="w-5 h-5 rounded-full border-[2.5px] border-primary-foreground/30 border-t-primary-foreground animate-spin" />
+             <div className="w-[22px] h-[22px] rounded-full border-[3px] border-primary-foreground/30 border-t-primary-foreground animate-spin" />
           ) : (
-             <Send className="w-5 h-5 ml-0.5" />
+             <Send className="w-[20px] h-[20px] ml-0.5" />
           )}
         </button>
       </form>

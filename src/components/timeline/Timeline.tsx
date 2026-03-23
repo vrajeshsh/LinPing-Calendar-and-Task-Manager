@@ -1,60 +1,158 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
-import { DaySchedule } from '@/types';
+import { useEffect, useState, useMemo, useRef } from 'react';
+import { DaySchedule, TimeBlock } from '@/types';
 import { TimelineBlock } from './TimelineBlock';
-import { parseTime } from '@/lib/scheduleHelpers';
+import { parseTime, formatTime12h } from '@/lib/scheduleHelpers';
+import { differenceInMinutes } from 'date-fns';
+import { useScheduleStore } from '@/store/useScheduleStore';
+import { cn } from '@/lib/utils';
+import { GripVertical } from 'lucide-react';
+
+const FIXED_TITLES = ['sleep', 'office', 'gym'];
+function isFixed(b: TimeBlock) {
+  return b.type === 'fixed' || FIXED_TITLES.some(t => b.title.toLowerCase().includes(t));
+}
 
 export function Timeline({ schedule }: { schedule: DaySchedule }) {
   const [now, setNow] = useState(new Date());
+  const reorderBlocks = useScheduleStore(s => s.reorderBlocks);
+  const dragIndexRef = useRef<number | null>(null);
 
   useEffect(() => {
-    // Update current time every 10 seconds to keep progress smooth
-    const timer = setInterval(() => setNow(new Date()), 10000);
-    return () => clearInterval(timer);
+    const t = setInterval(() => setNow(new Date()), 10_000);
+    return () => clearInterval(t);
   }, []);
 
-  // Sort blocks chronologically
+  // Sort: Sleep always last, rest chronological
   const sortedBlocks = useMemo(() => {
     return [...schedule.blocks].sort((a, b) => {
-      // Very basic sort. Cross-midnight blocks are harder to sort by string,
-      // but assuming standard linear schedule for now.
-      const aTime = parseTime(a.startTime).getTime();
-      const bTime = parseTime(b.startTime).getTime();
-      return aTime - bTime;
+      if (a.title.toLowerCase() === 'sleep') return 1;
+      if (b.title.toLowerCase() === 'sleep') return -1;
+      return parseTime(a.startTime).getTime() - parseTime(b.startTime).getTime();
     });
   }, [schedule.blocks]);
 
+  // Build items with free-time gap labels
+  const timelineItems = useMemo(() => {
+    const items: Array<{ type: 'block' | 'free'; block?: TimeBlock; start?: string; end?: string; mins?: number }> = [];
+    for (let i = 0; i < sortedBlocks.length; i++) {
+      const block = sortedBlocks[i];
+      items.push({ type: 'block', block });
+      const next = sortedBlocks[i + 1];
+      if (next && block.title.toLowerCase() !== 'sleep') {
+        const gap = differenceInMinutes(parseTime(next.startTime), parseTime(block.endTime));
+        if (gap > 0 && gap < 90) {
+          items.push({ type: 'free', start: block.endTime, end: next.startTime, mins: gap });
+        }
+      }
+    }
+    return items;
+  }, [sortedBlocks]);
+
+  // Drag handlers
+  const handleDragStart = (e: React.DragEvent, idx: number) => {
+    dragIndexRef.current = idx;
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIdx: number) => {
+    e.preventDefault();
+    const dragIdx = dragIndexRef.current;
+    if (dragIdx === null || dragIdx === dropIdx) return;
+
+    const dragged = sortedBlocks[dragIdx];
+    const target = sortedBlocks[dropIdx];
+
+    // Prevent dragging/dropping onto fixed blocks
+    if (isFixed(dragged) || isFixed(target)) return;
+
+    const newBlocks = [...sortedBlocks];
+    newBlocks.splice(dragIdx, 1);
+    newBlocks.splice(dropIdx, 0, dragged);
+
+    // Reflow times: keep dragged block duration, shift everything to not overlap
+    // Simple approach: swap start/end times between the two blocks
+    const newBlocksWithTimes = [...newBlocks];
+    const origDraggedTime = { startTime: dragged.startTime, endTime: dragged.endTime };
+    const origTargetTime = { startTime: target.startTime, endTime: target.endTime };
+    const draggedInNew = newBlocksWithTimes.find(b => b.id === dragged.id)!;
+    const targetInNew = newBlocksWithTimes.find(b => b.id === target.id)!;
+    draggedInNew.startTime = origTargetTime.startTime;
+    draggedInNew.endTime = origTargetTime.endTime;
+    targetInNew.startTime = origDraggedTime.startTime;
+    targetInNew.endTime = origDraggedTime.endTime;
+
+    reorderBlocks(schedule.date, newBlocksWithTimes);
+    dragIndexRef.current = null;
+  };
+
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+
   return (
-    <div className="relative pt-6 pb-24 flex flex-col gap-6 md:gap-8">
-      {/* Vertical subtle line connecting blocks (desktop/tablet) */}
-      <div className="absolute left-[81px] top-10 bottom-10 w-px bg-border/40 z-0 hidden md:block" />
-      
-      {sortedBlocks.map((block) => {
+    <div className="relative pt-4 pb-24 flex flex-col gap-5 md:gap-6">
+      {/* Vertical connector line */}
+      <div className="absolute left-[76px] top-8 bottom-12 w-px bg-border/20 z-0 hidden md:block" />
+
+      {timelineItems.map((item, idx) => {
+        if (item.type === 'free') {
+          return (
+            <div key={`free-${idx}`} className="flex items-center pl-0 md:pl-[104px]">
+              <div className="flex-1 flex items-center gap-2">
+                <div className="h-px flex-1 border-t border-dashed border-border/30" />
+                <span className="text-[9px] font-bold tracking-widest uppercase text-muted-foreground/40 whitespace-nowrap px-2 py-0.5 rounded-full bg-muted/20">
+                  {item.mins}m free · {formatTime12h(item.start!)} – {formatTime12h(item.end!)}
+                </span>
+                <div className="h-px flex-1 border-t border-dashed border-border/30" />
+              </div>
+            </div>
+          );
+        }
+
+        const block = item.block!;
+        // Find block index in sortedBlocks for drag
+        const blockIdx = sortedBlocks.findIndex(b => b.id === block.id);
         const start = parseTime(block.startTime);
         let end = parseTime(block.endTime);
-        // Handle midnight crossing
         if (end < start) {
           end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
-          // If now is also early morning, shift start/end to match 'now' day
           if (now.getHours() < 12 && start.getHours() >= 12) {
             start.setTime(start.getTime() - 24 * 60 * 60 * 1000);
             end.setTime(end.getTime() - 24 * 60 * 60 * 1000);
           }
         }
-        
-        const isActive = (now >= start) && (now < end);
+        const isActive = now >= start && now < end;
         const isPast = now >= end;
+        const canDrag = !isFixed(block);
 
         return (
-          <TimelineBlock 
-            key={block.id} 
-            block={block} 
-            isActive={isActive} 
-            isPast={isPast} 
-            now={now}
-            date={schedule.date}
-          />
+          <div
+            key={block.id}
+            draggable={canDrag}
+            onDragStart={canDrag ? (e) => handleDragStart(e, blockIdx) : undefined}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, blockIdx)}
+            className={cn(
+              "group/drag",
+              canDrag ? "cursor-grab active:cursor-grabbing" : ""
+            )}
+          >
+            {/* Drag handle hint */}
+            {canDrag && (
+              <div className="hidden md:flex absolute -left-3 top-1/2 -translate-y-1/2 opacity-0 group-hover/drag:opacity-40 transition-opacity z-20">
+                <GripVertical className="w-4 h-4 text-muted-foreground" />
+              </div>
+            )}
+            <div className="relative">
+              <TimelineBlock
+                block={block}
+                isActive={isActive}
+                isPast={isPast}
+                now={now}
+                date={schedule.date}
+              />
+            </div>
+          </div>
         );
       })}
     </div>

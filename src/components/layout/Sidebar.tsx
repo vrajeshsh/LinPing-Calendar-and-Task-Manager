@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { CalendarDays, Home, PieChart, Settings, CheckSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const NAV_ITEMS = [
   { name: 'Today', href: '/', icon: Home },
@@ -45,6 +46,11 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      <div className="mt-auto pt-6 border-t border-border/40 flex items-center justify-between px-2">
+        <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase hidden lg:block">Theme</span>
+        <ThemeToggle />
+      </div>
     </aside>
   );
 }
