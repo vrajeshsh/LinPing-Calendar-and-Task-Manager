@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Send, Sparkles } from 'lucide-react';
 import { useScheduleStore } from '@/store/useScheduleStore';
+import { toast } from 'sonner';
 
 export function AICommandBar() {
   const [prompt, setPrompt] = useState('');
@@ -13,6 +14,8 @@ export function AICommandBar() {
     if (!prompt.trim()) return;
     
     setLoading(true);
+    const toastId = toast.loading('AI is analyzing your schedule...');
+    
     try {
       const today = new Date().toISOString().split('T')[0];
       const store = useScheduleStore.getState();
@@ -37,12 +40,17 @@ export function AICommandBar() {
       }
       
       if (data.updatedBlocks && Array.isArray(data.updatedBlocks)) {
-         store.saveSchedule(today, { ...schedule, blocks: data.updatedBlocks });
-         // Ideally use a toast for this, but standard alert for MVP
-         alert(`Schedule updated by AI:\n${data.explanation}`);
+         await store.saveSchedule(today, { ...schedule, blocks: data.updatedBlocks });
+         toast.success('Schedule updated by AI', {
+           id: toastId,
+           description: data.explanation,
+           duration: 5000,
+         });
+      } else {
+        toast.info('No changes suggested', { id: toastId, description: data.explanation });
       }
     } catch (err: any) {
-      alert(`AI Request Failed: ${err.message}`);
+      toast.error('AI Request Failed', { id: toastId, description: err.message });
     } finally {
       setLoading(false);
       setPrompt('');

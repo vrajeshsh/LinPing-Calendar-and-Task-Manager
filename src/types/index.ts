@@ -9,6 +9,8 @@ export interface Task {
   priority: PriorityLevel;
   notes?: string;
   recurring?: boolean;
+  is_archived?: boolean;
+  deleted_at?: string | null;
 }
 
 export interface ArchivedTask extends Task {

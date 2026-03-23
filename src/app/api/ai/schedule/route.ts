@@ -11,10 +11,19 @@ interface AIRequestPayload {
   currentTime: string;
 }
 
+import { createClient } from '@/utils/supabase/server';
+
 export async function POST(req: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     if (!OPENROUTER_API_KEY) {
-      return NextResponse.json({ error: 'OpenRouter API key is not configured in .env.local' }, { status: 500 });
+      return NextResponse.json({ error: 'OpenRouter API key is not configured' }, { status: 500 });
     }
 
     const body = await req.json() as AIRequestPayload;

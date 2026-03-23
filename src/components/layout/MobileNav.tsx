@@ -6,10 +6,10 @@ import { CalendarDays, Home, PieChart, CheckSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NAV_ITEMS = [
-  { name: 'Today', href: '/', icon: Home },
-  { name: 'Calendar', href: '/calendar', icon: CalendarDays },
-  { name: 'Tasks', href: '/tasks', icon: CheckSquare },
-  { name: 'Insights', href: '/insights', icon: PieChart },
+  { name: 'Today', href: '/app/today', icon: Home },
+  { name: 'Calendar', href: '/app/calendar', icon: CalendarDays },
+  { name: 'Tasks', href: '/app/tasks', icon: CheckSquare },
+  { name: 'Insights', href: '/app/insights', icon: PieChart },
 ];
 
 export function MobileNav() {

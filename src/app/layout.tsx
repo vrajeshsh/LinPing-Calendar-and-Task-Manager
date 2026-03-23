@@ -11,6 +11,8 @@ export const metadata: Metadata = {
   description: "AI-powered minimalist schedule system",
 };
 
+import { Toaster } from 'sonner';
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -20,7 +22,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} min-h-full flex flex-col bg-background text-foreground`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <LayoutShell>{children}</LayoutShell>
+          {children}
+          <Toaster position="top-center" expand={false} richColors />
         </ThemeProvider>
       </body>
     </html>

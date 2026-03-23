@@ -2,16 +2,17 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CalendarDays, Home, PieChart, Settings, CheckSquare } from 'lucide-react';
+import { CalendarDays, Home, PieChart, Settings, CheckSquare, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { signOut } from '@/app/auth/actions';
 
 const NAV_ITEMS = [
-  { name: 'Today', href: '/', icon: Home },
-  { name: 'Calendar', href: '/calendar', icon: CalendarDays },
-  { name: 'Tasks', href: '/tasks', icon: CheckSquare },
-  { name: 'Insights', href: '/insights', icon: PieChart },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Today', href: '/app/today', icon: Home },
+  { name: 'Calendar', href: '/app/calendar', icon: CalendarDays },
+  { name: 'Tasks', href: '/app/tasks', icon: CheckSquare },
+  { name: 'Insights', href: '/app/insights', icon: PieChart },
+  { name: 'Settings', href: '/app/settings', icon: Settings },
 ];
 
 export function Sidebar() {
@@ -47,9 +48,21 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="mt-auto pt-6 border-t border-border/40 flex items-center justify-between px-2">
-        <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase hidden lg:block">Theme</span>
-        <ThemeToggle />
+      <div className="mt-auto space-y-4">
+        <div className="pt-4 border-t border-border/40 flex items-center justify-between px-2">
+          <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase hidden lg:block">Theme</span>
+          <ThemeToggle />
+        </div>
+        
+        <form action={signOut}>
+          <button 
+            type="submit"
+            className="flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-300 group"
+          >
+            <LogOut className="w-5 h-5 transition-colors group-hover:text-destructive" />
+            <span className="hidden lg:block font-medium text-sm">Sign Out</span>
+          </button>
+        </form>
       </div>
     </aside>
   );
