@@ -30,12 +30,28 @@ export async function signup(formData: FormData) {
     password: formData.get('password') as string,
   }
 
-  const { error } = await supabase.auth.signUp(data)
+  const { data: signupData, error } = await supabase.auth.signUp(data)
 
   if (error) {
     return redirect(`/signup?error=${encodeURIComponent(error.message)}`)
   }
 
+  // Check if user was created and email confirmation is required
+  if (signupData.user && !signupData.user.email_confirmed_at) {
+    // Try to sign in immediately (works if email confirmation is disabled)
+    const { error: signInError } = await supabase.auth.signInWithPassword(data)
+
+    if (!signInError) {
+      // Auto-signin worked, redirect to onboarding
+      revalidatePath('/', 'layout')
+      redirect('/onboarding')
+    } else {
+      // Email confirmation required, redirect to login with message
+      return redirect(`/login?message=${encodeURIComponent('Account created successfully! Please check your email to confirm your account, then sign in.')}`)
+    }
+  }
+
+  // User was created and confirmed immediately
   revalidatePath('/', 'layout')
   redirect('/onboarding')
 }

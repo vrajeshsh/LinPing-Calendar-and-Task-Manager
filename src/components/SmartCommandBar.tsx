@@ -535,9 +535,9 @@ export function SmartCommandBar({ prompt, setPrompt }: SmartCommandBarProps) {
     if (mins >= 60) {
       const h = Math.floor(mins / 60);
       const m = mins % 60;
-      return m > 0 ? `${h}h ${m}m` : `${h}h`;
+      return m > 0 ? `${h} H ${m} M` : `${h} H`;
     }
-    return `${mins}m`;
+    return `${mins} M`;
   };
   
   const formatTimeDisplay = (time: string) => {
@@ -565,11 +565,14 @@ export function SmartCommandBar({ prompt, setPrompt }: SmartCommandBarProps) {
       <form onSubmit={handleSubmit}
         className={cn(
           "flex items-center bg-card border rounded-2xl p-2.5 transition-all shadow-sm",
-          "focus-within:ring-4 focus-within:ring-primary/15 focus-within:border-primary/40",
-          "hover:border-border/70",
+          "focus-within:ring-4 focus-within:border-primary/40",
+          "hover:shadow-md",
           showPreview && canSubmit && "border-emerald-500/30 bg-emerald-500/5",
           parsedTask?.error || conflictCheck?.hasConflict ? "border-amber-500/30" : ""
         )}
+        style={{
+          '--tw-ring-color': 'var(--input-focus)',
+        } as React.CSSProperties}
       >
         <div className={cn(
           "w-11 h-11 rounded-[14px] flex items-center justify-center mr-3 shrink-0 transition-colors",

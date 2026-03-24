@@ -150,7 +150,8 @@ export const supabaseService = {
 
   async saveDaySchedule(date: string, blocks: any[]) {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw new Error(`Auth error: ${authError.message}`);
       if (!user) throw new Error('Not authenticated');
 
       // 1. Ensure day_schedule exists
@@ -160,10 +161,11 @@ export const supabaseService = {
         .select()
         .single();
 
-      if (sError) throw sError;
+      if (sError) throw new Error(`Schedule upsert error: ${sError.message}`);
 
       // 2. Delete existing blocks
-      await supabase.from('day_blocks').delete().eq('day_schedule_id', schedule.id);
+      const { error: deleteError } = await supabase.from('day_blocks').delete().eq('day_schedule_id', schedule.id);
+      if (deleteError) throw new Error(`Delete blocks error: ${deleteError.message}`);
 
       // 3. Insert new blocks
       const blocksToInsert = blocks.map((b, i) => ({
@@ -178,8 +180,8 @@ export const supabaseService = {
       }));
 
       const { error: bError } = await supabase.from('day_blocks').insert(blocksToInsert);
-      if (bError) throw bError;
-      
+      if (bError) throw new Error(`Insert blocks error: ${bError.message}`);
+
       return schedule;
     } catch (error) {
       console.error('Supabase error in saveDaySchedule:', error);
@@ -197,22 +199,10 @@ export const supabaseService = {
         .eq('user_id', user.id);
       return data || [];
     } catch (error) {
-      console.error('Supabase error in getTemplates, using default template:', error);
-      return [{
-        id: 'default-template',
-        name: 'Default Schedule',
-        user_id: 'mock-user',
-        template_blocks: [
-          {
-            id: 'block-1',
-            title: 'Sleep',
-            start_time: '21:30',
-            end_time: '04:00',
-            type: 'fixed',
-          },
-          // Add more default blocks
-        ],
-      }];
+      console.error('Supabase error in getTemplates:', error);
+      // Return empty array - NO fallback to hardcoded templates
+      // User must complete onboarding to get a schedule
+      return [];
     }
   }
 };

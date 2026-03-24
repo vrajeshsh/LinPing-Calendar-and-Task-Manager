@@ -86,6 +86,32 @@
   --nature-green: oklch(0.7 0.05 142);
   --nature-leaf: oklch(0.65 0.03 142);
   --nature-muted: oklch(0.95 0.01 142);
+
+  /* Subtle block type colors - very low opacity tints */
+  --block-sleep: oklch(0.98 0.005 220);        /* Very light cool blue-gray */
+  --block-work: oklch(0.97 0.003 120);         /* Very light neutral gray */
+  --block-workout: oklch(0.98 0.004 142);      /* Soft muted green */
+  --block-meal: oklch(0.98 0.003 45);          /* Very light warm tone */
+  --block-personal: oklch(0.97 0.002 60);      /* Soft warm neutral */
+  --block-flexible: oklch(0.97 0.001 120);     /* Neutral with slight tint */
+
+  /* Active block highlight */
+  --block-active: oklch(0.96 0.008 142);        /* Slightly stronger green tint */
+
+  /* Progress indicators */
+  --progress-bg: oklch(0.94 0.005 120);         /* Neutral gray base */
+  --progress-fill: oklch(0.75 0.02 142);        /* Soft green */
+
+  /* Calendar adherence */
+  --calendar-low: oklch(0.96 0.003 120);        /* Light adherence */
+  --calendar-high: oklch(0.94 0.008 142);       /* Higher adherence */
+
+  /* Holiday indicators */
+  --holiday-accent: oklch(0.75 0.015 142);      /* Muted green */
+
+  /* Input states */
+  --input-focus: oklch(0.96 0.006 142);         /* Soft green outline */
+  --input-hover: oklch(0.97 0.002 120);         /* Slight background change */
 }
 
 .dark {
@@ -120,6 +146,32 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  /* Dark mode block colors - slightly darker backgrounds with lifted tints */
+  --block-sleep: oklch(0.18 0.008 220);         /* Dark cool blue-gray */
+  --block-work: oklch(0.19 0.005 120);          /* Dark neutral gray */
+  --block-workout: oklch(0.18 0.006 142);       /* Dark muted green */
+  --block-meal: oklch(0.19 0.004 45);           /* Dark warm tone */
+  --block-personal: oklch(0.19 0.003 60);       /* Dark warm neutral */
+  --block-flexible: oklch(0.19 0.002 120);      /* Dark neutral */
+
+  /* Active block highlight - slightly lifted */
+  --block-active: oklch(0.22 0.01 142);         /* Slightly stronger green tint */
+
+  /* Progress indicators - darker */
+  --progress-bg: oklch(0.25 0.008 120);         /* Darker gray base */
+  --progress-fill: oklch(0.6 0.03 142);         /* Softer green */
+
+  /* Calendar adherence - darker */
+  --calendar-low: oklch(0.2 0.005 120);         /* Dark low adherence */
+  --calendar-high: oklch(0.18 0.01 142);        /* Dark high adherence */
+
+  /* Holiday indicators - darker */
+  --holiday-accent: oklch(0.5 0.02 142);        /* Darker muted green */
+
+  /* Input states - darker */
+  --input-focus: oklch(0.22 0.008 142);         /* Dark soft green outline */
+  --input-hover: oklch(0.21 0.003 120);         /* Dark slight background */
 }
 
 @layer base {

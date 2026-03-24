@@ -8,7 +8,7 @@ import Link from "next/link"
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams: { error?: string }
+  searchParams: { error?: string; message?: string }
 }) {
   return (
     <AuthCard 
@@ -36,6 +36,12 @@ export default function LoginPage({
         {searchParams.error && (
           <p className="text-sm font-medium text-destructive text-center">
             {searchParams.error}
+          </p>
+        )}
+
+        {searchParams.message && (
+          <p className="text-sm font-medium text-green-600 dark:text-green-400 text-center">
+            {searchParams.message}
           </p>
         )}
 

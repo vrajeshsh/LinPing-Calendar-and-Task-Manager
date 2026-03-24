@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useScheduleStore } from '@/store/useScheduleStore';
 import { ScheduleTemplate, TimeBlock } from '@/types';
-import { formatTime12h } from '@/lib/scheduleHelpers';
+import { formatTime12h, getBlockColor } from '@/lib/scheduleHelpers';
 import { Clock, Edit2, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,9 @@ export function DefaultBlocks({ onSelectBlock }: DefaultBlocksProps) {
   
   const defaultTemplate = useMemo(() => templates[0], [templates]);
   
-  if (!defaultTemplate || !defaultTemplate.blocks) {
+  // CRITICAL: Do not render if no templates exist
+  // User must complete onboarding before seeing default blocks
+  if (!defaultTemplate || !defaultTemplate.blocks || templates.length === 0) {
     return null;
   }
 
@@ -62,7 +64,10 @@ export function DefaultBlocks({ onSelectBlock }: DefaultBlocksProps) {
                   : "border-border/20 bg-background/50 hover:border-border/50 hover:bg-background/80 cursor-pointer",
                 block.type === 'fixed' && "border-l-4"
               )}
-              style={block.type === 'fixed' ? { borderLeftColor: 'var(--nature-leaf)' } : undefined}
+              style={{
+                backgroundColor: isEditing ? undefined : getBlockColor(block),
+                ...(block.type === 'fixed' ? { borderLeftColor: 'var(--nature-leaf)' } : {})
+              }}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { TimeBlock } from '@/types';
 import { cn } from '@/lib/utils';
-import { parseTime, formatTime12h } from '@/lib/scheduleHelpers';
+import { parseTime, formatTime12h, formatMinutes, getBlockColor } from '@/lib/scheduleHelpers';
 import { CheckCircle2, Lock, Unlock, XCircle, Timer, Clock, Play, Pencil, X, Check } from 'lucide-react';
 import { differenceInMinutes } from 'date-fns';
 import { useScheduleStore } from '@/store/useScheduleStore';
@@ -166,7 +166,7 @@ export function TimelineBlock({ block, isActive, isPast, now, date }: Props) {
           isActive ? "bg-card border-primary/30 shadow-xl shadow-primary/5 ring-1 ring-primary/10"
             : isPast ? "bg-muted/15 border-transparent"
             : "bg-card/60 border-border/25 hover:border-border/50 hover:bg-card/80 hover:shadow-md"
-        )}>
+        )} style={{ backgroundColor: isActive ? 'var(--block-active)' : getBlockColor(block) }}>
           <div className="p-4 md:p-5 flex flex-col gap-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -233,11 +233,11 @@ export function TimelineBlock({ block, isActive, isPast, now, date }: Props) {
             {/* Progress (active block) */}
             {isActive && (
               <div className="flex flex-col gap-2 mt-1">
-                <div className="h-1.5 w-full bg-primary/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full transition-all duration-1000" style={{ width: `${progress}%` }} />
+                <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ backgroundColor: 'var(--progress-bg)' }}>
+                  <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${progress}%`, backgroundColor: 'var(--progress-fill)' }} />
                 </div>
                 <span className="text-[10px] font-bold text-primary/60 uppercase tracking-widest">
-                  {Math.floor(elapsed)}m done · {duration - Math.floor(elapsed)}m left
+                  {formatMinutes(Math.floor(elapsed))} done · {formatMinutes(Math.floor(duration - elapsed))} left
                 </span>
                 {!blockIsFixed && (
                   <div className="flex items-center gap-2 mt-0.5">
@@ -245,9 +245,9 @@ export function TimelineBlock({ block, isActive, isPast, now, date }: Props) {
                       <Timer className="w-3 h-3" />Delay:
                     </span>
                     {[5, 15, 30, 60].map(m => (
-                      <button key={m} onClick={() => handleDelay(m)} title={`Delay ${m}m`}
+                      <button key={m} onClick={() => handleDelay(m)} title={`Delay ${m}M`}
                         className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 transition-all active:scale-95"
-                      >{m < 60 ? `+${m}m` : '+1h'}</button>
+                      >{m < 60 ? `+${m}M` : '+1H'}</button>
                     ))}
                   </div>
                 )}

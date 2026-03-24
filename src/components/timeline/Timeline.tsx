@@ -20,6 +20,7 @@ export function Timeline({ schedule }: { schedule: DaySchedule }) {
   const user = useScheduleStore(s => s.user);
   const dragIndexRef = useRef<number | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -96,78 +97,117 @@ export function Timeline({ schedule }: { schedule: DaySchedule }) {
   const handleDragEnd = () => {
     dragIndexRef.current = null;
     setDraggingId(null);
+    setDragOverId(null);
   };
 
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+  const handleDragOver = (e: React.DragEvent, blockId?: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (blockId) {
+      setDragOverId(blockId);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverId(null);
+  };
 
   return (
-    <div className="relative pt-4 pb-24 flex flex-col gap-5 md:gap-6">
-      {/* Vertical connector line */}
-      <div className="absolute left-[76px] top-8 bottom-12 w-px bg-border/20 z-0 hidden md:block" />
+    <div className="relative pt-6 pb-24">
+      {/* Refined vertical timeline guide */}
+      <div className="absolute left-[76px] top-8 bottom-12 w-px bg-gradient-to-b from-border/40 via-border/20 to-border/40 z-0 hidden md:block" />
 
-      {timelineItems.map((item, idx) => {
-        if (item.type === 'free') {
+      {/* Subtle time markers */}
+      <div className="absolute left-[76px] top-8 bottom-12 z-0 hidden md:block">
+        {sortedBlocks.map((block, idx) => {
+          const start = user?.timezone ? parseTimeInTimezone(block.startTime, user.timezone) : parseTime(block.startTime);
+          const isActive = now >= start && now < (user?.timezone ? parseTimeInTimezone(block.endTime, user.timezone) : parseTime(block.endTime));
           return (
-            <div key={`free-${idx}`} className="flex items-center pl-0 md:pl-[104px]">
-              <div className="flex-1 flex items-center gap-2">
-                <div className="h-px flex-1 border-t border-dashed border-border/30" />
-                <span className="text-[9px] font-bold tracking-widest uppercase text-muted-foreground/40 whitespace-nowrap px-2 py-0.5 rounded-full bg-muted/20">
-                  {formatMinutes(item.mins!)} free · {formatTime12h(item.start!)} – {formatTime12h(item.end!)}
-                </span>
-                <div className="h-px flex-1 border-t border-dashed border-border/30" />
+            <div
+              key={`marker-${block.id}`}
+              className={cn(
+                "absolute w-2 h-2 rounded-full -translate-x-1/2 transition-all duration-300",
+                isActive ? "bg-primary shadow-sm scale-125" : "bg-border/40"
+              )}
+              style={{ top: `${(idx * 80) + 20}px` }}
+            />
+          );
+        })}
+      </div>
+
+      <div className="flex flex-col gap-6 md:gap-8">
+        {timelineItems.map((item, idx) => {
+          if (item.type === 'free') {
+            return (
+              <div key={`free-${idx}`} className="flex items-center pl-0 md:pl-[104px] relative">
+                {/* Subtle connector for free time */}
+                <div className="hidden md:block absolute left-[76px] w-px h-full bg-border/10 -translate-x-1/2" />
+                <div className="flex-1 flex items-center gap-3">
+                  <div className="h-px flex-1 border-t border-dashed border-border/30" />
+                  <span className="text-[10px] font-medium tracking-wide uppercase text-muted-foreground/50 whitespace-nowrap px-3 py-1 rounded-full bg-muted/30 border border-border/20">
+                    {formatMinutes(item.mins!)} free · {formatTime12h(item.start!)} – {formatTime12h(item.end!)}
+                  </span>
+                  <div className="h-px flex-1 border-t border-dashed border-border/30" />
+                </div>
+              </div>
+            );
+          }
+
+          const block = item.block!;
+          // Find block index in sortedBlocks for drag
+          const blockIdx = sortedBlocks.findIndex(b => b.id === block.id);
+          const start = user?.timezone ? parseTimeInTimezone(block.startTime, user.timezone) : parseTime(block.startTime);
+          let end = user?.timezone ? parseTimeInTimezone(block.endTime, user.timezone) : parseTime(block.endTime);
+          if (end < start) {
+            end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
+            if (now.getHours() < 12 && start.getHours() >= 12) {
+              start.setTime(start.getTime() - 24 * 60 * 60 * 1000);
+              end.setTime(end.getTime() - 24 * 60 * 60 * 1000);
+            }
+          }
+          const isActive = now >= start && now < end;
+          const isPast = now >= end;
+          const canDrag = !isFixed(block);
+
+          return (
+            <div
+              key={block.id}
+              draggable={canDrag}
+              onDragStart={canDrag ? (e) => handleDragStart(e, blockIdx, block.id) : undefined}
+              onDragOver={(e) => handleDragOver(e, block.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, blockIdx)}
+              onDragEnd={handleDragEnd}
+              className={cn(
+                "group/drag relative transition-all duration-300 ease-out",
+                canDrag ? "cursor-grab active:cursor-grabbing hover:scale-[1.02] hover:shadow-md" : "",
+                draggingId === block.id && "opacity-40 scale-95 rotate-1 shadow-lg",
+                dragOverId === block.id && draggingId && "ring-2 ring-primary/50 ring-offset-2 ring-offset-background scale-[1.01]"
+              )}
+            >
+              {/* Enhanced drag handle hint */}
+              {canDrag && (
+                <div className="hidden md:flex absolute -left-4 top-1/2 -translate-y-1/2 opacity-0 group-hover/drag:opacity-80 transition-all duration-300 z-20">
+                  <div className="p-1.5 rounded-md bg-background/90 backdrop-blur-sm border border-border/50 shadow-lg transform group-hover/drag:scale-110">
+                    <GripVertical className="w-3.5 h-3.5 text-muted-foreground group-hover/drag:text-primary transition-colors duration-200" />
+                  </div>
+                </div>
+              )}
+
+              {/* Block container with refined spacing */}
+              <div className="relative pl-0 md:pl-[104px]">
+                <TimelineBlock
+                  block={block}
+                  isActive={isActive}
+                  isPast={isPast}
+                  now={now}
+                  date={schedule.date}
+                />
               </div>
             </div>
           );
-        }
-
-        const block = item.block!;
-        // Find block index in sortedBlocks for drag
-        const blockIdx = sortedBlocks.findIndex(b => b.id === block.id);
-        const start = user?.timezone ? parseTimeInTimezone(block.startTime, user.timezone) : parseTime(block.startTime);
-        let end = user?.timezone ? parseTimeInTimezone(block.endTime, user.timezone) : parseTime(block.endTime);
-        if (end < start) {
-          end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
-          if (now.getHours() < 12 && start.getHours() >= 12) {
-            start.setTime(start.getTime() - 24 * 60 * 60 * 1000);
-            end.setTime(end.getTime() - 24 * 60 * 60 * 1000);
-          }
-        }
-        const isActive = now >= start && now < end;
-        const isPast = now >= end;
-        const canDrag = !isFixed(block);
-
-        return (
-          <div
-            key={block.id}
-            draggable={canDrag}
-            onDragStart={canDrag ? (e) => handleDragStart(e, blockIdx, block.id) : undefined}
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, blockIdx)}
-            onDragEnd={handleDragEnd}
-            className={cn(
-              "group/drag",
-              canDrag ? "cursor-grab active:cursor-grabbing" : "",
-              draggingId === block.id && "opacity-50"
-            )}
-          >
-            {/* Drag handle hint */}
-            {canDrag && (
-              <div className="hidden md:flex absolute -left-3 top-1/2 -translate-y-1/2 opacity-0 group-hover/drag:opacity-40 transition-opacity z-20">
-                <GripVertical className="w-4 h-4 text-muted-foreground" />
-              </div>
-            )}
-            <div className="relative">
-              <TimelineBlock
-                block={block}
-                isActive={isActive}
-                isPast={isPast}
-                now={now}
-                date={schedule.date}
-              />
-            </div>
-          </div>
-        );
-      })}
+        })}
+      </div>
     </div>
   );
 }

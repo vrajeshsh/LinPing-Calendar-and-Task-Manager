@@ -12,6 +12,7 @@ interface ScheduleState {
   loading: boolean;
   user: { id: string; timezone: string } | null;
   selectedDate: string; // YYYY-MM-DD format
+  needsOnboarding: boolean; // True if user has no schedule template
 
   fetchInitialData: () => Promise<void>;
   addTask: (task: Task) => Promise<void>;
@@ -29,6 +30,7 @@ interface ScheduleState {
   initializeDayFromTemplate: (date: string, templateId: string) => Promise<void>;
   rolloverIncompleteTasks: () => Promise<void>;
   setSelectedDate: (date: string) => void;
+  completeOnboarding: () => void;
 }
 
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
@@ -40,24 +42,55 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   loading: false,
   user: null,
   selectedDate: format(new Date(), 'yyyy-MM-dd'),
+  needsOnboarding: true, // Start assuming onboarding is needed until proven otherwise
 
   fetchInitialData: async () => {
     set({ loading: true });
     try {
-      const [tasks, archived, templates, profile] = await Promise.all([
+      const [tasks, archived, rawTemplates, profile] = await Promise.all([
         supabaseService.getTasks(),
         supabaseService.getArchivedTasks(),
         supabaseService.getTemplates(),
         supabaseService.getProfile(),
       ]);
+      // Transform archived tasks to match ArchivedTask type
+      const transformedArchived: ArchivedTask[] = archived.map(task => ({
+        ...task,
+        deletedAt: task.deleted_at || new Date().toISOString(), // Fallback for tasks without deleted_at
+      }));
+      
+      // Transform templates from Supabase format to internal format
+      // Supabase returns template_blocks with start_time/end_time, we need startTime/endTime and status
+      const templates: ScheduleTemplate[] = rawTemplates.map(template => ({
+        id: template.id,
+        name: template.name,
+        blocks: (template.template_blocks || [])
+          .sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0))
+          .map((block: any) => ({
+            id: block.id,
+            title: block.title,
+            startTime: block.start_time,
+            endTime: block.end_time,
+            type: block.type as 'fixed' | 'flexible',
+            status: 'pending' as const,
+          }))
+      }));
+      
+      // CRITICAL: Determine if user needs onboarding based on whether they have templates
+      // If templates array is empty, user MUST complete onboarding
+      const hasExistingTemplate = templates.length > 0;
+      
       set({ 
         tasks, 
-        archivedTasks: archived, 
+        archivedTasks: transformedArchived, 
         templates,
-        user: profile ? { id: profile.id, timezone: profile.timezone || 'America/New_York' } : null
+        user: profile ? { id: profile.id, timezone: profile.timezone || 'America/New_York' } : null,
+        needsOnboarding: !hasExistingTemplate
       });
     } catch (error) {
       console.error('Error fetching initial data:', error);
+      // On error, assume onboarding is needed to be safe
+      set({ needsOnboarding: true });
     } finally {
       set({ loading: false });
     }
@@ -101,6 +134,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     // This could be a background job but keeping it here for simplicity
     const s = get();
     const toKeep = s.archivedTasks.filter(t => {
+      if (!t.deletedAt) return true; // Keep tasks without deletedAt
       const daysOld = differenceInDays(new Date(), parseISO(t.deletedAt));
       return daysOld < 7;
     });
@@ -232,5 +266,11 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
 
   setSelectedDate: (date: string) => {
     set({ selectedDate: date });
+  },
+
+  completeOnboarding: async () => {
+    // After onboarding is complete, re-fetch data to get the new templates
+    // This ensures needsOnboarding is set to false before any navigation
+    await get().fetchInitialData();
   },
 }));

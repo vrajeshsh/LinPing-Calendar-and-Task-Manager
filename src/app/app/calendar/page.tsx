@@ -38,8 +38,8 @@ export default function CalendarPage() {
       }
     }
 
-    // Navigate to the Scheduler/today view
-    router.push('/app/today');
+    // Navigate to the Scheduler view
+    router.push('/app/scheduler');
   };
 
   useEffect(() => setMounted(true), []);
@@ -115,9 +115,9 @@ export default function CalendarPage() {
 
         {/* Holiday legend */}
         <div className="flex items-center gap-4 mt-4 text-[11px] font-semibold text-muted-foreground">
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" /> Federal Holiday</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500/80 inline-block" /> High adherence</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500/70 inline-block" /> On track</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--holiday-accent)' }} /> Federal Holiday</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--calendar-high)' }} /> High adherence</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--calendar-low)' }} /> On track</span>
         </div>
       </header>
 
@@ -175,7 +175,7 @@ function MonthView({ daysInMonth, monthStart, schedules, onDateClick, selectedDa
                   isToday(date) ? "bg-primary text-primary-foreground" : "text-foreground"
                 )}>{format(date, 'd')}</span>
                 {holiday && (
-                  <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0 mt-1" title={holiday} />
+                  <span className="w-2 h-2 rounded-full shrink-0 mt-1" style={{ backgroundColor: 'var(--holiday-accent)' }} title={holiday} />
                 )}
               </div>
               {holiday && (
@@ -183,12 +183,12 @@ function MonthView({ daysInMonth, monthStart, schedules, onDateClick, selectedDa
               )}
               <div className="mt-auto">
                 {score !== null && (
-                  <div className={cn(
-                    "text-[11px] font-bold px-1.5 py-0.5 rounded-md w-fit",
-                    score >= 80 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" :
-                    score >= 50 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" :
-                    "bg-destructive/15 text-destructive"
-                  )}>{score}%</div>
+                  <div 
+                    className="text-[11px] font-bold px-1.5 py-0.5 rounded-md w-fit"
+                    style={{
+                      backgroundColor: score >= 80 ? 'var(--calendar-high)' : 'var(--calendar-low)'
+                    }}
+                  >{score}%</div>
                 )}
               </div>
             </button>

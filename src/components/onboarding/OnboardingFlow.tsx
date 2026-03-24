@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,6 +11,8 @@ import { formatTime12h } from '@/lib/scheduleHelpers';
 import { Moon, Sun, Briefcase, Dumbbell, Utensils, Heart, Check, ArrowRight, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { QuickPresets, SCHEDULE_PRESETS, type PresetOption } from './QuickPresets';
+import { useScheduleStore } from '@/store/useScheduleStore';
 
 interface OnboardingData {
   sleepStart: string;
@@ -29,6 +32,7 @@ interface OnboardingData {
 }
 
 const STEPS = [
+  { id: 'quick-start', title: 'Quick Start', icon: Sun },
   { id: 'welcome', title: 'Welcome', icon: Heart },
   { id: 'sleep', title: 'Sleep', icon: Moon },
   { id: 'work', title: 'Work', icon: Briefcase },
@@ -48,7 +52,10 @@ const EXTRA_OPTIONS = [
 ];
 
 export function OnboardingFlow() {
+  const router = useRouter();
+  const [mode, setMode] = useState<'presets' | 'custom' | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
+  const [selectedPreset, setSelectedPreset] = useState<PresetOption | null>(null);
   const [data, setData] = useState<OnboardingData>({
     sleepStart: '22:00',
     sleepEnd: '06:00',
@@ -67,7 +74,27 @@ export function OnboardingFlow() {
     setData(prev => ({ ...prev, ...updates }));
   };
 
+  // Handle preset selection
+  const handlePresetSelect = (preset: PresetOption) => {
+    setSelectedPreset(preset);
+    setMode('presets');
+    // Jump directly to preview
+    setCurrentStep(STEPS.length - 1);
+  };
+
+  // Handle custom flow start
+  const handleBuildCustom = () => {
+    setMode('custom');
+    setCurrentStep(1); // Skip past quick presets, start at welcome
+  };
+
   const generateSchedule = (): TimeBlock[] => {
+    // If preset is selected, use its blocks
+    if (selectedPreset) {
+      return selectedPreset.blocks;
+    }
+
+    // Otherwise generate from custom data
     const blocks: TimeBlock[] = [];
 
     // Sleep block (always included)
@@ -152,13 +179,21 @@ export function OnboardingFlow() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to complete setup');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server error: ${response.status}`);
       }
 
-      window.location.href = '/app/today';
+      // Refresh the store data to update needsOnboarding state
+      // This must complete before navigation to prevent redirect loops
+      const completeOnboarding = useScheduleStore.getState().completeOnboarding;
+      await completeOnboarding();
+
+      // Use router.push for client-side navigation to preserve store state
+      // window.location.href would cause full page reload and reinitialize the store
+      router.push('/app/scheduler');
     } catch (error) {
       console.error('Onboarding error:', error);
-      toast.error('Something went wrong. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -168,6 +203,15 @@ export function OnboardingFlow() {
     const step = STEPS[currentStep];
 
     switch (step.id) {
+      case 'quick-start':
+        return (
+          <QuickPresets
+            onSelect={handlePresetSelect}
+            onCustom={handleBuildCustom}
+            loading={loading}
+          />
+        );
+
       case 'welcome':
         return (
           <div className="text-center space-y-6">
@@ -175,13 +219,13 @@ export function OnboardingFlow() {
               <Heart className="w-8 h-8 text-primary" />
             </div>
             <div>
-              <h2 className="text-2xl font-semibold mb-2">Welcome to LinPing</h2>
+              <h2 className="text-2xl font-semibold mb-2">Build your schedule</h2>
               <p className="text-muted-foreground">
-                Let's create your perfect daily rhythm in just a few quick steps.
-                We'll build a schedule that works for you.
+                Let's create a daily routine that works perfectly for you.
+                Answer a few quick questions to get started.
               </p>
             </div>
-            <Button onClick={() => setCurrentStep(1)} className="w-full">
+            <Button onClick={() => setCurrentStep(2)} className="w-full">
               Get Started <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </div>
@@ -222,10 +266,10 @@ export function OnboardingFlow() {
             </div>
 
             <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setCurrentStep(0)} className="flex-1">
+              <Button variant="outline" onClick={() => setCurrentStep(1)} className="flex-1">
                 <ArrowLeft className="w-4 h-4 mr-2" /> Back
               </Button>
-              <Button onClick={() => setCurrentStep(2)} className="flex-1">
+              <Button onClick={() => setCurrentStep(3)} className="flex-1">
                 Next <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </div>
@@ -282,10 +326,10 @@ export function OnboardingFlow() {
             </div>
 
             <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setCurrentStep(1)} className="flex-1">
+              <Button variant="outline" onClick={() => setCurrentStep(2)} className="flex-1">
                 <ArrowLeft className="w-4 h-4 mr-2" /> Back
               </Button>
-              <Button onClick={() => setCurrentStep(3)} className="flex-1">
+              <Button onClick={() => setCurrentStep(4)} className="flex-1">
                 Next <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </div>
@@ -330,10 +374,10 @@ export function OnboardingFlow() {
             </div>
 
             <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setCurrentStep(2)} className="flex-1">
+              <Button variant="outline" onClick={() => setCurrentStep(3)} className="flex-1">
                 <ArrowLeft className="w-4 h-4 mr-2" /> Back
               </Button>
-              <Button onClick={() => setCurrentStep(4)} className="flex-1">
+              <Button onClick={() => setCurrentStep(5)} className="flex-1">
                 Next <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </div>
@@ -378,10 +422,10 @@ export function OnboardingFlow() {
             </div>
 
             <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setCurrentStep(3)} className="flex-1">
+              <Button variant="outline" onClick={() => setCurrentStep(4)} className="flex-1">
                 <ArrowLeft className="w-4 h-4 mr-2" /> Back
               </Button>
-              <Button onClick={() => setCurrentStep(5)} className="flex-1">
+              <Button onClick={() => setCurrentStep(6)} className="flex-1">
                 Next <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </div>
@@ -432,10 +476,10 @@ export function OnboardingFlow() {
             </div>
 
             <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setCurrentStep(4)} className="flex-1">
+              <Button variant="outline" onClick={() => setCurrentStep(5)} className="flex-1">
                 <ArrowLeft className="w-4 h-4 mr-2" /> Back
               </Button>
-              <Button onClick={() => setCurrentStep(6)} className="flex-1">
+              <Button onClick={() => setCurrentStep(7)} className="flex-1">
                 Next <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </div>
@@ -474,7 +518,7 @@ export function OnboardingFlow() {
             </div>
 
             <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setCurrentStep(5)} className="flex-1">
+              <Button variant="outline" onClick={() => setCurrentStep(6)} className="flex-1">
                 <ArrowLeft className="w-4 h-4 mr-2" /> Back
               </Button>
               <Button onClick={handleComplete} disabled={loading} className="flex-1">

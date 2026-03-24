@@ -29,16 +29,41 @@ export function formatTimeInTimezone(date: Date, timezone: string, formatStr: st
   return format(toZonedTime(date, timezone), formatStr, { timeZone: timezone });
 }
 
+/** Get subtle background color for block types */
+export function getBlockColor(block: TimeBlock, isActive: boolean = false): string {
+  if (isActive) return 'var(--block-active)';
+
+  const title = block.title.toLowerCase();
+
+  // Sleep blocks
+  if (title.includes('sleep')) return 'var(--block-sleep)';
+
+  // Work/Office blocks
+  if (title.includes('work') || title.includes('office') || title.includes('meeting')) return 'var(--block-work)';
+
+  // Workout/Gym blocks
+  if (title.includes('workout') || title.includes('gym') || title.includes('exercise') || title.includes('run')) return 'var(--block-workout)';
+
+  // Meal blocks
+  if (title.includes('lunch') || title.includes('dinner') || title.includes('breakfast') || title.includes('meal')) return 'var(--block-meal)';
+
+  // Personal time blocks
+  if (title.includes('personal') || title.includes('free') || title.includes('break')) return 'var(--block-personal)';
+
+  // Default to flexible
+  return 'var(--block-flexible)';
+}
+
 export function formatMinutes(minutes: number): string {
   if (minutes < 60) {
-    return `${minutes} mins`;
+    return `${minutes} M`;
   }
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   if (mins === 0) {
-    return `${hours} h`;
+    return `${hours} H`;
   }
-  return `${hours} h ${mins} mins`;
+  return `${hours} H ${mins} M`;
 }
 
 export function isOverlap(block1: TimeBlock, block2: TimeBlock): boolean {
