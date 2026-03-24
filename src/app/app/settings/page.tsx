@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Button } from '@/components/ui/button';
 import { signOut } from '@/app/auth/actions';
-import { LogOut, User, Globe } from 'lucide-react';
+import { LogOut, User, Globe, Brain, RotateCcw, Sparkles } from 'lucide-react';
 import { useScheduleStore } from '@/store/useScheduleStore';
 import { supabaseService } from '@/services/supabaseService';
 import { toast } from 'sonner';
@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Switch } from '@/components/ui/switch';
 
 const TIMEZONES = [
   'America/New_York',
@@ -35,6 +36,68 @@ export default function SettingsPage() {
   const { user } = useScheduleStore();
   const [selectedTimezone, setSelectedTimezone] = useState(user?.timezone || 'America/New_York');
   const [showSignOutDialog, setShowSignOutDialog] = useState(false);
+  const [adaptiveEnabled, setAdaptiveEnabled] = useState(true);
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // Fetch personalization settings
+  useEffect(() => {
+    const fetchPersonalization = async () => {
+      try {
+        const response = await fetch('/api/personalization');
+        if (response.ok) {
+          const data = await response.json();
+          setAdaptiveEnabled(data.adaptiveEnabled ?? true);
+        }
+      } catch (error) {
+        console.error('Failed to fetch personalization:', error);
+      }
+    };
+    
+    fetchPersonalization();
+  }, []);
+
+  const handleAdaptiveToggle = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/personalization', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adaptiveEnabled: !adaptiveEnabled })
+      });
+      
+      if (response.ok) {
+        setAdaptiveEnabled(!adaptiveEnabled);
+        toast.success(!adaptiveEnabled ? 'Adaptive learning enabled' : 'Adaptive learning disabled');
+      } else {
+        toast.error('Failed to update settings');
+      }
+    } catch (error) {
+      toast.error('Failed to update settings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPersonalization = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/personalization', {
+        method: 'DELETE'
+      });
+      
+      if (response.ok) {
+        toast.success('Learned preferences have been reset');
+        setShowResetDialog(false);
+      } else {
+        toast.error('Failed to reset preferences');
+      }
+    } catch (error) {
+      toast.error('Failed to reset preferences');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleTimezoneChange = async () => {
     try {
@@ -58,16 +121,6 @@ export default function SettingsPage() {
       </header>
 
       <div className="flex-1 px-4 md:px-8 max-w-2xl w-full mx-auto pb-32 space-y-4">
-        {/* Account Section */}
-        <div className="bg-card/60 border border-border/30 rounded-2xl p-5 shadow-sm">
-          <h2 className="font-semibold text-base mb-4 flex items-center gap-2">
-            <User className="w-4 h-4" /> Account
-          </h2>
-          <div className="space-y-1 text-sm text-muted-foreground">
-            <p>Logged in as <span className="font-medium text-foreground">{user?.id ? `${user.id.slice(0, 8)}...` : 'Unknown'}</span></p>
-          </div>
-        </div>
-
         {/* Preferences Section */}
         <div className="bg-card/60 border border-border/30 rounded-2xl p-5 shadow-sm">
           <h2 className="font-semibold text-base mb-4 flex items-center gap-2">
@@ -110,19 +163,70 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Adaptive Learning Section */}
+        <div className="bg-card/60 border border-border/30 rounded-2xl p-5 shadow-sm">
+          <h2 className="font-semibold text-base mb-4 flex items-center gap-2">
+            <Brain className="w-4 h-4" /> Adaptive Learning
+          </h2>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between py-2">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium text-[15px]">Adaptive Learning</p>
+                  <p className="text-muted-foreground text-[12px] mt-0.5">Learn your patterns to provide smarter suggestions</p>
+                </div>
+              </div>
+              <Switch 
+                checked={adaptiveEnabled} 
+                onCheckedChange={handleAdaptiveToggle}
+                disabled={loading}
+              />
+            </div>
+            
+            <div className="flex items-center justify-between pt-2 border-t border-border/30">
+              <div>
+                <p className="font-medium text-[15px]">Reset Learned Preferences</p>
+                <p className="text-muted-foreground text-[12px] mt-0.5">Clear all learned patterns and start fresh</p>
+              </div>
+              <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowResetDialog(true)}
+                  disabled={loading}
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" /> Reset
+                </Button>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Reset Learned Preferences</DialogTitle>
+                    <DialogDescription>
+                      This will clear all learned patterns including your preferred times, durations, and task aliases. Your calendar data will not be affected.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setShowResetDialog(false)}>
+                      Cancel
+                    </Button>
+                    <Button variant="destructive" onClick={handleResetPersonalization} disabled={loading}>
+                      Reset Preferences
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
+        </div>
+
         {/* Contact Section */}
         <div className="bg-card/60 border border-border/30 rounded-2xl p-5 shadow-sm">
-          <h2 className="font-semibold text-base mb-3">Get in Touch</h2>
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            Found a bug? Have a brilliant idea? Or just want to share how LinPing helped you reclaim your mornings? 
-            Drop a line — I read every message (usually while pretending to be productive).
+          <h2 className="font-semibold text-base mb-3">Contact</h2>
+          <p className="text-muted-foreground text-sm">
+            Bugs? Ideas? Just want to say hi? Reach out at <a href="mailto:vrajeshshah13@gmail.com" className="text-primary hover:underline">vrajeshshah13@gmail.com</a>. I reply... eventually.
           </p>
-          <a 
-            href="mailto:vrajeshshah13@gmail.com" 
-            className="inline-flex items-center gap-2 mt-3 text-sm font-medium text-primary hover:text-primary/80 transition-colors cursor-pointer"
-          >
-            vrajeshshah13@gmail.com
-          </a>
         </div>
 
         {/* About Section */}
@@ -132,8 +236,8 @@ export default function SettingsPage() {
           <p className="text-muted-foreground text-[10px] mt-2 tracking-widest font-medium">VIBE CODED AT 3AM WITH LOTS OF COFFEE</p>
         </div>
 
-        {/* Sign Out Section - Last and visually separated */}
-        <div className="bg-destructive/5 border border-destructive/20 rounded-2xl p-5 shadow-sm">
+        {/* Sign Out Section */}
+        <div className="bg-card/60 border border-border/30 rounded-2xl p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium text-[15px]">Sign Out</p>

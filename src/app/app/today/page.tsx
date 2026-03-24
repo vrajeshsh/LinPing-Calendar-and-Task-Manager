@@ -216,9 +216,7 @@ export default function Home() {
             <h2 className="text-lg font-semibold text-foreground/90 tracking-tight">
               {isViewingToday ? 'Your Schedule' : 'Daily Schedule'}
             </h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              {isViewingToday ? 'Stay on track with your personalized timeline' : 'View and manage your daily activities'}
-            </p>
+
           </div>
 
           {/* Timeline Card */}

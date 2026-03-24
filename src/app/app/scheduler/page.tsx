@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { format, differenceInMinutes, addDays, subDays } from 'date-fns';
 import { useScheduleStore } from '@/store/useScheduleStore';
 import { Timeline } from '@/components/timeline/Timeline';
-import { DefaultBlocks } from '@/components/DefaultBlocks';
 import { calculateAdherenceScore, parseTime, formatTime12h, formatMinutes, getCurrentTimeInTimezone, parseTimeInTimezone } from '@/lib/scheduleHelpers';
 import { AlertTriangle, TrendingDown, ChevronLeft, ChevronRight, Clock, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -216,9 +215,7 @@ export default function Home() {
             <h2 className="text-lg font-semibold text-foreground/90 tracking-tight">
               {isViewingToday ? 'Your Schedule' : 'Daily Schedule'}
             </h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              {isViewingToday ? 'Stay on track with your personalized timeline' : 'View and manage your daily activities'}
-            </p>
+
           </div>
 
           {/* Timeline Card */}
@@ -238,11 +235,6 @@ export default function Home() {
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Default Blocks Section */}
-          <div className="mt-8">
-            <DefaultBlocks />
           </div>
         </div>
       </div>

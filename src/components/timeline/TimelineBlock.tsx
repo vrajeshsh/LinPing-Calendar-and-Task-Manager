@@ -7,6 +7,33 @@ import { parseTime, formatTime12h, formatMinutes, getBlockColor } from '@/lib/sc
 import { CheckCircle2, Lock, Unlock, XCircle, Timer, Clock, Play, Pencil, X, Check } from 'lucide-react';
 import { differenceInMinutes } from 'date-fns';
 import { useScheduleStore } from '@/store/useScheduleStore';
+import { RescheduleExplanation } from './RescheduleExplanation';
+
+// ─── Proportional Height Configuration ──────────────────────────────────────
+const MIN_BLOCK_HEIGHT = 60;   // Minimum height for very short blocks (15-30 min)
+const BASE_DURATION = 30;       // Base duration for scaling (30 min)
+const BASE_HEIGHT = 60;         // Height for 30 min block
+const MAX_BLOCK_HEIGHT = 200;   // Maximum height cap for very long blocks
+const HEIGHT_SCALE_FACTOR = 1.6; // Scale factor for duration → height conversion
+
+/**
+ * Calculate proportional height based on duration
+ * Uses a softened scaling curve for very long blocks
+ */
+function calculateBlockHeight(durationMinutes: number): number {
+  // Softened scaling: use square root for larger durations
+  const baseHeight = (durationMinutes / BASE_DURATION) * BASE_HEIGHT;
+  
+  // Apply softened scaling for blocks longer than 60 min
+  if (durationMinutes > 60) {
+    // Gradually reduce scale factor as duration increases
+    const softFactor = 1 + (HEIGHT_SCALE_FACTOR - 1) * Math.pow(60 / durationMinutes, 0.3);
+    const softHeight = baseHeight * softFactor;
+    return Math.min(Math.max(softHeight, MIN_BLOCK_HEIGHT), MAX_BLOCK_HEIGHT);
+  }
+  
+  return Math.max(baseHeight, MIN_BLOCK_HEIGHT);
+}
 
 interface Props {
   block: TimeBlock;
@@ -14,6 +41,7 @@ interface Props {
   isPast: boolean;
   now: Date;
   date: string;
+  isTodaySchedule?: boolean;
 }
 
 const FIXED_TITLES = ['sleep', 'office', 'gym'];
@@ -85,7 +113,7 @@ function BlockEditModal({ block, date, onClose }: { block: TimeBlock; date: stri
 }
 
 // ─── TimelineBlock ──────────────────────────────────────────────────────────
-export function TimelineBlock({ block, isActive, isPast, now, date }: Props) {
+export function TimelineBlock({ block, isActive, isPast, now, date, isTodaySchedule = true }: Props) {
   const updateBlockStatus = useScheduleStore(s => s.updateBlockStatus);
   const saveSchedule = useScheduleStore(s => s.saveSchedule);
   const schedules = useScheduleStore(s => s.schedules);
@@ -130,8 +158,11 @@ export function TimelineBlock({ block, isActive, isPast, now, date }: Props) {
   const blockIsFixed = isFixedBlock(block);
 
   const durLabel = duration >= 60
-    ? `${Math.floor(duration / 60)}h${duration % 60 > 0 ? ` ${duration % 60}m` : ''}`
-    : `${duration}m`;
+    ? `${Math.floor(duration / 60)} H${duration % 60 > 0 ? ` ${duration % 60} M` : ''}`
+    : `${duration} M`;
+
+  // Calculate proportional height based on duration
+  const blockHeight = calculateBlockHeight(duration);
 
   return (
     <>
@@ -140,7 +171,7 @@ export function TimelineBlock({ block, isActive, isPast, now, date }: Props) {
         isActive ? "opacity-100" : (isPast ? "opacity-45 hover:opacity-75" : "opacity-90 hover:opacity-100")
       )}>
         {/* Time column */}
-        <div className="w-14 md:w-20 pt-1.5 shrink-0 text-right flex flex-col items-end">
+        <div className="w-14 md:w-20 shrink-0 text-right flex flex-col items-end" style={{ paddingTop: `${Math.min(blockHeight * 0.15, 16)}px` }}>
           <span className={cn(
             "text-[13px] font-semibold tracking-tight tabular-nums leading-tight",
             isActive ? "text-primary" : "text-foreground"
@@ -149,8 +180,8 @@ export function TimelineBlock({ block, isActive, isPast, now, date }: Props) {
           {isActive && <div className="mt-1.5 text-[8px] font-black tracking-widest uppercase text-primary animate-pulse">NOW</div>}
         </div>
 
-        {/* Node dot */}
-        <div className="hidden md:flex flex-col items-center mt-2 shrink-0">
+        {/* Node dot - positioned based on block height */}
+        <div className="hidden md:flex flex-col items-center shrink-0" style={{ paddingTop: `${Math.min(blockHeight * 0.15, 16)}px` }}>
           <div className={cn(
             "w-3 h-3 rounded-full border-[2px] z-10 bg-background transition-all duration-300",
             isActive ? "border-primary ring-4 ring-primary/20 scale-125 shadow-sm"
@@ -160,14 +191,20 @@ export function TimelineBlock({ block, isActive, isPast, now, date }: Props) {
           )} />
         </div>
 
-        {/* Card */}
+        {/* Card - with proportional height */}
         <div className={cn(
           "flex-1 rounded-[20px] border transition-all duration-300 overflow-hidden",
           isActive ? "bg-card border-primary/30 shadow-xl shadow-primary/5 ring-1 ring-primary/10"
             : isPast ? "bg-muted/15 border-transparent"
             : "bg-card/60 border-border/25 hover:border-border/50 hover:bg-card/80 hover:shadow-md"
-        )} style={{ backgroundColor: isActive ? 'var(--block-active)' : getBlockColor(block) }}>
-          <div className="p-4 md:p-5 flex flex-col gap-3">
+        )} 
+          style={{ 
+            backgroundColor: isActive ? 'var(--block-active)' : getBlockColor(block),
+            minHeight: `${blockHeight}px`
+          }}
+        >
+          <div className="p-4 md:p-5 flex flex-col justify-between" style={{ minHeight: `${blockHeight - 2}px` }}>
+            {/* Top section */}
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-1">
@@ -189,8 +226,18 @@ export function TimelineBlock({ block, isActive, isPast, now, date }: Props) {
                 </div>
                 <p className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
                   <Clock className="w-3 h-3" />{durLabel}
-                  {!blockIsFixed && <><span className="text-border/50">·</span><span className="text-primary/45 text-[10px]">flexible</span></>}
+                  {!blockIsFixed && <><span className="text-border/50">·</span><span className="text-primary/45 text-[11px] font-medium">flexible</span></>}
                 </p>
+                
+                {/* Reschedule explanation - shows when task was moved by AI */}
+                {(block.rescheduleReason || block.rescheduledFrom) && (
+                  <RescheduleExplanation
+                    reason={block.rescheduleReason || 'This task was adjusted by the scheduler'}
+                    originalTime={block.rescheduledFrom}
+                    newTime={block.startTime}
+                    originalDate={block.originalDate}
+                  />
+                )}
               </div>
 
               {/* Actions */}
@@ -229,6 +276,7 @@ export function TimelineBlock({ block, isActive, isPast, now, date }: Props) {
                 )}
               </div>
             </div>
+            {/* End of top section */}
 
             {/* Progress (active block) */}
             {isActive && (
@@ -236,17 +284,17 @@ export function TimelineBlock({ block, isActive, isPast, now, date }: Props) {
                 <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ backgroundColor: 'var(--progress-bg)' }}>
                   <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${progress}%`, backgroundColor: 'var(--progress-fill)' }} />
                 </div>
-                <span className="text-[10px] font-bold text-primary/60 uppercase tracking-widest">
+                <span className="text-[10px] font-medium text-primary/60 uppercase tracking-wider">
                   {formatMinutes(Math.floor(elapsed))} done · {formatMinutes(Math.floor(duration - elapsed))} left
                 </span>
                 {!blockIsFixed && (
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                       <Timer className="w-3 h-3" />Delay:
                     </span>
                     {[5, 15, 30, 60].map(m => (
                       <button key={m} onClick={() => handleDelay(m)} title={`Delay ${m}M`}
-                        className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 transition-all active:scale-95"
+                        className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 transition-all active:scale-95"
                       >{m < 60 ? `+${m}M` : '+1H'}</button>
                     ))}
                   </div>

@@ -5,11 +5,12 @@ import { AuthCard } from "@/components/auth/AuthCard"
 import { login } from "@/app/auth/actions"
 import Link from "next/link"
 
-export default function LoginPage({
+export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: { error?: string; message?: string }
+  searchParams: Promise<{ error?: string; message?: string }>
 }) {
+  const params = await searchParams
   return (
     <AuthCard 
       title="Welcome back" 
@@ -33,15 +34,15 @@ export default function LoginPage({
           <Input id="password" name="password" type="password" required />
         </div>
         
-        {searchParams.error && (
+        {params.error && (
           <p className="text-sm font-medium text-destructive text-center">
-            {searchParams.error}
+            {params.error}
           </p>
         )}
 
-        {searchParams.message && (
+        {params.message && (
           <p className="text-sm font-medium text-green-600 dark:text-green-400 text-center">
-            {searchParams.message}
+            {params.message}
           </p>
         )}
 

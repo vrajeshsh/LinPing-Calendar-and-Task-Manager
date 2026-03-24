@@ -5,11 +5,12 @@ import { AuthCard } from "@/components/auth/AuthCard"
 import { signup } from "@/app/auth/actions"
 import Link from "next/link"
 
-export default function SignupPage({
+export default async function SignupPage({
   searchParams,
 }: {
-  searchParams: { error?: string }
+  searchParams: Promise<{ error?: string }>
 }) {
+  const params = await searchParams
   return (
     <AuthCard 
       title="Create an account" 
@@ -25,9 +26,9 @@ export default function SignupPage({
           <Input id="password" name="password" type="password" required />
         </div>
         
-        {searchParams.error && (
+        {params.error && (
           <p className="text-sm font-medium text-destructive text-center">
-            {searchParams.error}
+            {params.error}
           </p>
         )}
 

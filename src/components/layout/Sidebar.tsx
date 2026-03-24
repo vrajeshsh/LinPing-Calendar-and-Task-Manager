@@ -5,11 +5,14 @@ import { usePathname } from 'next/navigation';
 import { CalendarDays, Home, PieChart, Settings, CheckSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const NAV_ITEMS = [
+const MAIN_NAV = [
   { name: 'Scheduler', href: '/app/scheduler', icon: Home },
-  { name: 'Calendar', href: '/app/calendar', icon: CalendarDays },
   { name: 'Tasks', href: '/app/tasks', icon: CheckSquare },
+  { name: 'Calendar', href: '/app/calendar', icon: CalendarDays },
   { name: 'Insights', href: '/app/insights', icon: PieChart },
+];
+
+const BOTTOM_NAV = [
   { name: 'Settings', href: '/app/settings', icon: Settings },
 ];
 
@@ -22,21 +25,25 @@ export function Sidebar() {
         <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-bold shadow-md">
           L
         </div>
-        <span className="font-semibold text-lg hidden lg:block tracking-tight text-foreground">LinPing</span>
+        <div className="hidden lg:block">
+          <span className="font-semibold text-lg tracking-tight text-foreground">LinPing</span>
+          <span className="text-xs text-muted-foreground ml-1">AI Calendar</span>
+        </div>
       </div>
 
-      <nav className="flex flex-col gap-2">
-        {NAV_ITEMS.map((item) => {
+      {/* Main navigation */}
+      <nav className="flex flex-col gap-1">
+        {MAIN_NAV.map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300 group hover:bg-muted/60",
+                "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300 group uppercase tracking-wider text-[11px] font-semibold",
                 isActive 
                   ? "bg-primary/10 text-primary font-medium" 
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
               )}
             >
               <item.icon className={cn("w-5 h-5 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
@@ -46,8 +53,33 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Spacer to push content to top */}
-      <div className="mt-auto" />
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Divider */}
+      <div className="border-t border-border/30 my-4" />
+
+      {/* Bottom navigation - Settings */}
+      <nav className="flex flex-col gap-1">
+        {BOTTOM_NAV.map((item) => {
+          const isActive = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300 group uppercase tracking-wider text-[11px] font-semibold",
+                isActive 
+                  ? "bg-primary/10 text-primary font-medium" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              )}
+            >
+              <item.icon className={cn("w-5 h-5 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+              <span className="hidden lg:block">{item.name}</span>
+            </Link>
+          );
+        })}
+      </nav>
     </aside>
   );
 }

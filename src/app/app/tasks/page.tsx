@@ -7,7 +7,6 @@ import { Send, Sparkles, Trash2, Pencil, Plus, X, Calendar, Check } from 'lucide
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { SmartCommandBar } from '@/components/SmartCommandBar';
-import { DefaultBlocks } from '@/components/DefaultBlocks';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 // Priority meta — 4-tier system
@@ -166,11 +165,6 @@ export default function TasksPage() {
       <div className="flex-1 px-4 md:px-8 max-w-3xl w-full mx-auto pb-16 flex flex-col">
         {/* Smart Command Bar - Primary Task Creation */}
         <SmartCommandBar prompt={prompt} setPrompt={setPrompt} />
-        
-        {/* Show DefaultBlocks only on larger screens as supplementary */}
-        <div className="hidden md:block">
-          <DefaultBlocks />
-        </div>
 
         {/* Priority filter chips */}
         <div className="flex items-center gap-2 mb-5 flex-wrap">
@@ -188,8 +182,7 @@ export default function TasksPage() {
             <div className="flex flex-col items-center gap-3">
               <Sparkles className="w-12 h-12 opacity-30" />
               <div className="text-center">
-                <p className="font-semibold text-base mb-1">Start building your task list</p>
-                <p className="text-sm opacity-75">Try typing something like:</p>
+                <p className="font-semibold text-base mb-1">Try typing something like:</p>
               </div>
             </div>
             <div className="flex flex-col gap-2 max-w-sm w-full">
@@ -207,17 +200,14 @@ export default function TasksPage() {
                 </button>
               ))}
             </div>
-            <p className="text-xs opacity-60 text-center max-w-xs">
-              Start typing in the command bar above
-            </p>
           </div>
         ) : (
           <div className="flex flex-col gap-2.5">
             {filtered.map(task => {
               const meta = PRIORITY_META[task.priority] ?? PRIORITY_META.medium;
               const dLabel = task.duration >= 60
-                ? `${Math.floor(task.duration / 60)}h${task.duration % 60 > 0 ? ` ${task.duration % 60}m` : ''}`
-                : `${task.duration}m`;
+                ? `${Math.floor(task.duration / 60)} H${task.duration % 60 > 0 ? ` ${task.duration % 60} M` : ''}`
+                : `${task.duration} M`;
               return (
                 <div key={task.id}
                   className="flex items-center gap-3 px-4 py-4 bg-card border border-border/25 rounded-2xl hover:border-border/50 hover:shadow-sm transition-all group"

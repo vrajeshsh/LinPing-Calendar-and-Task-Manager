@@ -26,6 +26,11 @@ export interface TimeBlock {
   type: BlockType;
   status: BlockStatus;
   taskId?: string;
+  // Rescheduling transparency fields
+  rescheduledFrom?: string; // Original start time if moved
+  rescheduledTo?: string; // New start time if moved
+  rescheduleReason?: string; // Human-readable reason for the change
+  originalDate?: string; // Original date if moved to different day
 }
 
 export interface DaySchedule {
@@ -48,4 +53,12 @@ export interface User {
     startOfDay: string;
     endOfDay: string;
   };
+  // Location-based settings
+  location?: {
+    latitude: number;
+    longitude: number;
+    city?: string;
+    country?: string;
+  };
+  locationPermission?: 'granted' | 'denied' | 'prompt';
 }

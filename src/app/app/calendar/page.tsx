@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useScheduleStore } from '@/store/useScheduleStore';
 import {
   format, startOfMonth, endOfMonth, eachDayOfInterval,
-  isToday, startOfYear, endOfYear
+  isToday, startOfYear, endOfYear, isSameDay
 } from 'date-fns';
 import { calculateAdherenceScore } from '@/lib/scheduleHelpers';
 import { getHoliday } from '@/lib/holidays';
@@ -27,14 +27,18 @@ export default function CalendarPage() {
     const dateStr = format(date, 'yyyy-MM-dd');
     setSelectedDate(dateStr);
 
-    // Immediately create schedule if it doesn't exist
-    const state = useScheduleStore.getState();
-    if (!state.schedules[dateStr] && state.templates.length > 0) {
-      try {
-        await initializeDayFromTemplate(dateStr, state.templates[0].id);
-      } catch (err) {
-        console.error('Failed to initialize day:', err);
-        // Continue anyway - the schedule page will handle fallback
+    // Only auto-create schedule if it's TODAY
+    const today = new Date();
+    const isTodayDate = isSameDay(date, today);
+    
+    if (isTodayDate) {
+      const state = useScheduleStore.getState();
+      if (!state.schedules[dateStr] && state.templates.length > 0) {
+        try {
+          await initializeDayFromTemplate(dateStr, state.templates[0].id);
+        } catch (err) {
+          console.error('Failed to initialize day:', err);
+        }
       }
     }
 
@@ -113,11 +117,11 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {/* Holiday legend */}
+        {/* Legend */}
         <div className="flex items-center gap-4 mt-4 text-[11px] font-semibold text-muted-foreground">
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--holiday-accent)' }} /> Federal Holiday</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--calendar-high)' }} /> High adherence</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--calendar-low)' }} /> On track</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full ring-1 ring-[var(--calendar-today-ring)]" /> Today</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-lg" style={{ backgroundColor: 'var(--calendar-selected-bg)' }} /> Selected</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--holiday-accent)' }} /> Holiday</span>
         </div>
       </header>
 
@@ -143,50 +147,61 @@ function MonthView({ daysInMonth, monthStart, schedules, onDateClick, selectedDa
     <div>
       <div className="grid grid-cols-7 gap-1.5 md:gap-2">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-          <div key={d} className="text-center text-[11px] font-bold uppercase tracking-wider text-muted-foreground py-2">
+          <div key={d} className="text-center text-[11px] font-bold uppercase tracking-wider text-muted-foreground/60 py-2">
             {d}
           </div>
         ))}
         {/* Pad start */}
         {Array.from({ length: monthStart.getDay() }).map((_, i) => (
-          <div key={`pad-${i}`} className="h-20 md:h-28 rounded-2xl bg-muted/10" />
+          <div key={`pad-${i}`} className="h-20 md:h-28 rounded-2xl bg-transparent" />
         ))}
         {daysInMonth.map(date => {
           const dateStr = format(date, 'yyyy-MM-dd');
           const schedule = schedules[dateStr];
           const score = schedule ? calculateAdherenceScore(schedule.blocks) : null;
           const holiday = getHoliday(dateStr);
+          const isSelected = dateStr === selectedDate;
+          const isTodayDate = isToday(date);
+
           return (
             <button
               onClick={() => onDateClick(date)}
               key={dateStr}
               className={cn(
-                "h-20 md:h-28 rounded-2xl border p-2 flex flex-col transition-all duration-200 cursor-pointer hover:shadow-md active:scale-95",
-                dateStr === selectedDate
-                  ? "ring-2 ring-primary border-primary bg-primary/10 shadow-md"
-                  : isToday(date)
-                  ? "ring-2 ring-primary border-transparent bg-primary/5"
-                  : "bg-card/50 border-border/20 hover:border-border/50 hover:shadow-sm"
+                "h-20 md:h-28 rounded-2xl p-2 flex flex-col transition-all duration-200 cursor-pointer",
+                // Selected state (most important - warm beige fill)
+                isSelected && !holiday && "bg-[var(--calendar-selected-bg)] ring-2 ring-[var(--calendar-selected-ring)] shadow-sm",
+                // Selected + holiday (keep selected bg, add holiday dot)
+                isSelected && holiday && "bg-[var(--calendar-selected-bg)] ring-2 ring-[var(--calendar-selected-ring)] shadow-sm",
+                // Today only (subtle warm outline, no fill)
+                !isSelected && isTodayDate && "ring-2 ring-[var(--calendar-today-ring)] bg-[var(--calendar-today-bg)]",
+                // Normal days
+                !isSelected && !isTodayDate && "bg-card/30 hover:bg-card/60 border border-transparent hover:border-border/40"
               )}
             >
               <div className="flex items-start justify-between">
                 <span className={cn(
-                  "text-[13px] font-semibold w-6 h-6 flex items-center justify-center rounded-full",
-                  isToday(date) ? "bg-primary text-primary-foreground" : "text-foreground"
+                  "text-[13px] font-semibold w-6 h-6 flex items-center justify-center rounded-full transition-colors",
+                  isSelected && "text-[var(--calendar-selected-text)]",
+                  isTodayDate && !isSelected && "ring-1 ring-[var(--calendar-today-ring)] text-foreground",
+                  !isSelected && !isTodayDate && "text-foreground"
                 )}>{format(date, 'd')}</span>
+                {/* Holiday dot - muted terracotta */}
                 {holiday && (
                   <span className="w-2 h-2 rounded-full shrink-0 mt-1" style={{ backgroundColor: 'var(--holiday-accent)' }} title={holiday} />
                 )}
               </div>
-              {holiday && (
-                <span className="text-[9px] font-bold text-rose-400 leading-tight mt-0.5 truncate hidden md:block">{holiday}</span>
+              {/* Holiday label */}
+              {holiday && !isSelected && (
+                <span className="text-[9px] font-semibold leading-tight mt-0.5 truncate hidden md:block" style={{ color: 'var(--holiday-label)' }}>{holiday}</span>
               )}
+              {/* Adherence score - subtle badge at bottom */}
               <div className="mt-auto">
-                {score !== null && (
+                {score !== null && !isSelected && (
                   <div 
-                    className="text-[11px] font-bold px-1.5 py-0.5 rounded-md w-fit"
+                    className="text-[10px] font-bold px-1.5 py-0.5 rounded-md w-fit"
                     style={{
-                      backgroundColor: score >= 80 ? 'var(--calendar-high)' : 'var(--calendar-low)'
+                      backgroundColor: score >= 80 ? 'var(--calendar-high)' : score >= 50 ? 'var(--calendar-medium)' : 'var(--calendar-low)'
                     }}
                   >{score}%</div>
                 )}
@@ -220,16 +235,16 @@ function YearView({ daysInYear, schedules, year, onDateClick, selectedDate }: {
   const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
       {Object.entries(months).map(([monthIdx, days]) => {
         const firstDay = days[0];
         const startDow = firstDay.getDay();
         return (
-          <div key={monthIdx} className="bg-card/50 border border-border/20 rounded-2xl p-4">
-            <h3 className="text-[13px] font-bold text-foreground mb-3">{MONTH_NAMES[Number(monthIdx)]}</h3>
+          <div key={monthIdx} className="bg-card/30 border border-border/20 rounded-2xl p-4">
+            <h3 className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground mb-3">{MONTH_NAMES[Number(monthIdx)]}</h3>
             <div className="grid grid-cols-7 gap-0.5 mb-1">
               {['S','M','T','W','T','F','S'].map((d,i) => (
-                <div key={i} className="text-center text-[8px] font-bold text-muted-foreground/60">{d}</div>
+                <div key={i} className="text-center text-[7px] font-bold text-muted-foreground/50">{d}</div>
               ))}
             </div>
             <div className="grid grid-cols-7 gap-0.5">
@@ -239,28 +254,33 @@ function YearView({ daysInYear, schedules, year, onDateClick, selectedDate }: {
                 const schedule = schedules[dateStr];
                 const score = schedule ? calculateAdherenceScore(schedule.blocks) : null;
                 const holiday = getHoliday(dateStr);
+                const isSelected = dateStr === selectedDate;
+                const isTodayDate = isToday(date);
+
                 return (
                   <button
                     onClick={() => onDateClick(date)}
                     key={dateStr}
                     title={holiday ? `${format(date, 'MMM d')} — ${holiday}` : format(date, 'MMM d')}
                     className={cn(
-                      "aspect-square rounded-sm flex items-center justify-center relative transition-all hover:shadow-sm active:scale-95 cursor-pointer",
-                      dateStr === selectedDate ? "ring-1 ring-primary ring-offset-1 ring-offset-background rounded-full" : isToday(date) ? "ring-1 ring-primary rounded-full" : "",
-                      holiday ? "bg-rose-400/20" :
-                      dateStr === selectedDate ? "bg-primary/20" :
-                      score === null ? "bg-muted/20" :
-                      score >= 80 ? "bg-emerald-500/70" :
-                      score >= 50 ? "bg-amber-500/60" :
-                      "bg-destructive/50"
+                      "aspect-square rounded-lg flex items-center justify-center relative transition-all hover:bg-muted/40 active:scale-95 cursor-pointer",
+                      // Selected state (most important)
+                      isSelected && "bg-[var(--calendar-selected-bg)] ring-1 ring-[var(--calendar-selected-ring)]",
+                      // Today only
+                      !isSelected && isTodayDate && "ring-1 ring-[var(--calendar-today-ring)]",
+                      // Normal days - no fill by default
+                      !isSelected && !isTodayDate && "bg-transparent"
                     )}
                   >
                     <span className={cn(
-                      "text-[7px] font-bold",
-                      isToday(date) ? "text-primary" : "text-foreground/60"
+                      "text-[7px] font-semibold",
+                      isSelected && "text-[var(--calendar-selected-text)]",
+                      isTodayDate && !isSelected && "text-foreground",
+                      !isSelected && !isTodayDate && "text-foreground/70"
                     )}>{format(date, 'd')}</span>
+                    {/* Holiday dot */}
                     {holiday && (
-                      <span className="absolute -top-0.5 -right-0.5 w-1 h-1 rounded-full bg-rose-400" />
+                      <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--holiday-accent)' }} />
                     )}
                   </button>
                 );

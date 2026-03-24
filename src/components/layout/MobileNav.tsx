@@ -24,12 +24,12 @@ export function MobileNav() {
             key={item.href}
             href={item.href}
             className={cn(
-              "flex flex-col items-center justify-center w-full h-full gap-1 transition-all duration-300",
+              "flex flex-col items-center justify-center w-full h-full gap-1 transition-all duration-300 uppercase tracking-wider",
               isActive ? "text-primary" : "text-muted-foreground"
             )}
           >
             <item.icon className={cn("w-5 h-5", isActive ? "stroke-[2.5px] scale-110" : "stroke-[2px] scale-100")} />
-            <span className="text-[10px] font-medium">{item.name}</span>
+            <span className="text-[10px] font-semibold">{item.name}</span>
           </Link>
         );
       })}

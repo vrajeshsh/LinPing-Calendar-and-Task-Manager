@@ -113,14 +113,106 @@ create policy "Users can manage blocks through day schedules" on public.day_bloc
 
 -- Handle profile creation on signup
 create function public.handle_new_user()
-returns trigger as $$
+returns trigger as $
 begin
   insert into public.profiles (id, full_name, avatar_url)
   values (new.id, new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'avatar_url');
   return new;
 end;
-$$ language plpgsql security definer;
+$ language plpgsql security definer;
 
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- =============================================
+-- PERSONALIZATION TABLES
+-- =============================================
+
+-- User personalization settings
+create table public.user_personalization (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null unique,
+  adaptive_learning_enabled boolean default true,
+  created_at timestamp with time zone default timezone('utc'::text, now()),
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+alter table public.user_personalization enable row level security;
+
+create policy "Users can manage their own personalization" on public.user_personalization
+  for all using (auth.uid() = user_id);
+
+-- Learned task patterns (input -> normalized output mappings)
+create table public.task_patterns (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  raw_input text not null,
+  normalized_title text not null,
+  preferred_time_window text, -- e.g., 'after_dinner', 'morning', 'evening'
+  preferred_time text, -- e.g., '19:00'
+  average_duration integer, -- in minutes
+  acceptance_count integer default 1,
+  rejection_count integer default 0,
+  last_seen timestamp with time zone default timezone('utc'::text, now()),
+  created_at timestamp with time zone default timezone('utc'::text, now()),
+  unique(user_id, raw_input)
+);
+
+alter table public.task_patterns enable row level security;
+
+create policy "Users can manage their own patterns" on public.task_patterns
+  for all using (auth.uid() = user_id);
+
+-- Preferred time windows by task type
+create table public.preferred_time_windows (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  task_category text not null, -- e.g., 'exercise', 'study', 'journal'
+  preferred_day_part text not null, -- e.g., 'morning', 'afternoon', 'evening', 'after_dinner'
+  preferred_time text, -- specific time like '07:00', '19:30'
+  occurrence_count integer default 1,
+  last_used timestamp with time zone default timezone('utc'::text, now()),
+  created_at timestamp with time zone default timezone('utc'::text, now()),
+  unique(user_id, task_category)
+);
+
+alter table public.preferred_time_windows enable row level security;
+
+create policy "Users can manage their own time windows" on public.preferred_time_windows
+  for all using (auth.uid() = user_id);
+
+-- Task duration preferences
+create table public.preferred_durations (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  task_title_pattern text not null, -- pattern to match task titles
+  average_duration integer not null, -- in minutes
+  sample_count integer default 1,
+  last_used timestamp with time zone default timezone('utc'::text, now()),
+  created_at timestamp with time zone default timezone('utc'::text, now()),
+  unique(user_id, task_title_pattern)
+);
+
+alter table public.preferred_durations enable row level security;
+
+create policy "Users can manage their own durations" on public.preferred_durations
+  for all using (auth.uid() = user_id);
+
+-- Learning events log (for tracking what the system learns)
+create table public.learning_events (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  event_type text not null, -- 'accepted', 'rejected', 'edited', 'rescheduled'
+  raw_input text,
+  ai_suggestion text,
+  user_action text,
+  confidence_before float,
+  confidence_after float,
+  created_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+alter table public.learning_events enable row level security;
+
+create policy "Users can view their own learning events" on public.learning_events
+  for select using (auth.uid() = user_id);

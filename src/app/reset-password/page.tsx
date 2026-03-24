@@ -5,11 +5,12 @@ import { AuthCard } from "@/components/auth/AuthCard"
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 
-export default function ResetPasswordPage({
+export default async function ResetPasswordPage({
   searchParams,
 }: {
-  searchParams: { error?: string }
+  searchParams: Promise<{ error?: string }>
 }) {
+  const params = await searchParams
   async function updatePassword(formData: FormData) {
     'use server'
     const password = formData.get("password") as string
@@ -35,9 +36,9 @@ export default function ResetPasswordPage({
           <Input id="password" name="password" type="password" required />
         </div>
         
-        {searchParams.error && (
+        {params.error && (
           <p className="text-sm font-medium text-destructive text-center">
-            {searchParams.error}
+            {params.error}
           </p>
         )}
 

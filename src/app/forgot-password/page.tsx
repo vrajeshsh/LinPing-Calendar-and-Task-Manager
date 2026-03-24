@@ -6,11 +6,12 @@ import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 
-export default function ForgotPasswordPage({
+export default async function ForgotPasswordPage({
   searchParams,
 }: {
-  searchParams: { message?: string; error?: string }
+  searchParams: Promise<{ message?: string; error?: string }>
 }) {
+  const params = await searchParams
   async function resetPassword(formData: FormData) {
     'use server'
     const email = formData.get("email") as string
@@ -38,15 +39,15 @@ export default function ForgotPasswordPage({
           <Input id="email" name="email" type="email" placeholder="name@example.com" required />
         </div>
         
-        {searchParams.error && (
+        {params.error && (
           <p className="text-sm font-medium text-destructive text-center">
-            {searchParams.error}
+            {params.error}
           </p>
         )}
         
-        {searchParams.message && (
+        {params.message && (
           <p className="text-sm font-medium text-emerald-500 text-center">
-            {searchParams.message}
+            {params.message}
           </p>
         )}
 

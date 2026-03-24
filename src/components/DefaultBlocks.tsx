@@ -2,29 +2,50 @@
 
 import { useMemo, useState } from 'react';
 import { useScheduleStore } from '@/store/useScheduleStore';
-import { ScheduleTemplate, TimeBlock } from '@/types';
+import { TimeBlock } from '@/types';
 import { formatTime12h, getBlockColor } from '@/lib/scheduleHelpers';
-import { Clock, Edit2, Plus, X } from 'lucide-react';
+import { Clock, Edit2, Plus, Sun, Briefcase, Moon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
 interface DefaultBlocksProps {
   onSelectBlock?: (block: TimeBlock) => void;
+  compact?: boolean;
 }
 
-export function DefaultBlocks({ onSelectBlock }: DefaultBlocksProps) {
+export function DefaultBlocks({ onSelectBlock, compact = false }: DefaultBlocksProps) {
   const { templates } = useScheduleStore();
   const [isEditing, setIsEditing] = useState(false);
-  const [editingBlock, setEditingBlock] = useState<TimeBlock | null>(null);
   
   const defaultTemplate = useMemo(() => templates[0], [templates]);
   
   // CRITICAL: Do not render if no templates exist
-  // User must complete onboarding before seeing default blocks
   if (!defaultTemplate || !defaultTemplate.blocks || templates.length === 0) {
     return null;
   }
+
+  // Group blocks by time of day
+  const groupedBlocks = useMemo(() => {
+    const groups = {
+      morning: [] as TimeBlock[],
+      workday: [] as TimeBlock[],
+      evening: [] as TimeBlock[],
+    };
+
+    defaultTemplate.blocks.forEach((block) => {
+      const hour = parseInt(block.startTime.split(':')[0]);
+      if (hour < 9) {
+        groups.morning.push(block);
+      } else if (hour < 17) {
+        groups.workday.push(block);
+      } else {
+        groups.evening.push(block);
+      }
+    });
+
+    return groups;
+  }, [defaultTemplate]);
 
   const handleBlockClick = (block: TimeBlock) => {
     if (onSelectBlock) {
@@ -32,85 +53,112 @@ export function DefaultBlocks({ onSelectBlock }: DefaultBlocksProps) {
     }
   };
 
-  return (
-    <div className="mx-4 md:mx-8 mb-6">
-      <div className="bg-card/60 border border-border/30 rounded-2xl p-5 shadow-sm" style={{ borderColor: 'var(--nature-muted)' }}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-base flex items-center gap-2">
-            <Clock className="w-4 h-4" style={{ color: 'var(--nature-green)' }} />
-            Default Schedule
-          </h3>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsEditing(!isEditing)}
-            className="gap-1.5"
-            style={{ borderColor: 'var(--nature-muted)' }}
-          >
-            <Edit2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{isEditing ? 'Done' : 'Edit'}</span>
-          </Button>
-        </div>
+  const GroupIcon = ({ group }: { group: 'morning' | 'workday' | 'evening' }) => {
+    switch (group) {
+      case 'morning':
+        return <Sun className="w-3.5 h-3.5 text-amber-500" />;
+      case 'workday':
+        return <Briefcase className="w-3.5 h-3.5 text-emerald-500" />;
+      case 'evening':
+        return <Moon className="w-3.5 h-3.5 text-indigo-500" />;
+    }
+  };
 
-        <div className="grid grid-cols-1 gap-2">
-          {defaultTemplate.blocks.map((block) => (
-            <button
-              key={block.id}
-              onClick={() => handleBlockClick(block)}
-              className={cn(
-                "p-3 rounded-xl border transition-all text-left group",
-                isEditing
-                  ? "border-border/50 bg-background hover:border-primary/50"
-                  : "border-border/20 bg-background/50 hover:border-border/50 hover:bg-background/80 cursor-pointer",
-                block.type === 'fixed' && "border-l-4"
-              )}
-              style={{
-                backgroundColor: isEditing ? undefined : getBlockColor(block),
-                ...(block.type === 'fixed' ? { borderLeftColor: 'var(--nature-leaf)' } : {})
-              }}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-sm text-foreground truncate">{block.title}</p>
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground shrink-0">
-                      {block.type === 'fixed' ? 'Fixed' : 'Flex'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {formatTime12h(block.startTime)} – {formatTime12h(block.endTime)}
-                  </p>
-                </div>
-                {isEditing && (
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingBlock(block);
-                      }}
-                      className="p-1.5 hover:bg-muted rounded-lg transition-colors"
-                    >
-                      <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            </button>
-          ))}
-        </div>
+  const groupLabels = {
+    morning: 'Morning',
+    workday: 'Workday',
+    evening: 'Evening',
+  };
 
-        {isEditing && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full mt-3 gap-1.5"
-            onClick={() => toast.info('Add block feature coming soon')}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Block
-          </Button>
-        )}
+  const renderBlock = (block: TimeBlock) => (
+    <button
+      key={block.id}
+      onClick={() => handleBlockClick(block)}
+      className={cn(
+        "flex items-center justify-between py-2 px-3 rounded-lg transition-all text-left group cursor-pointer",
+        isEditing
+          ? "bg-background hover:bg-muted/50"
+          : "hover:bg-muted/30",
+        compact ? "py-1.5" : "py-2"
+      )}
+    >
+      <div className="flex items-center gap-2.5 flex-1 min-w-0">
+        <div 
+          className="w-1.5 h-1.5 rounded-full shrink-0"
+          style={{ backgroundColor: 'var(--nature-green)' }}
+        />
+        <span className={cn(
+          "text-sm truncate",
+          isEditing ? "text-foreground" : "text-muted-foreground"
+        )}>
+          {block.title}
+        </span>
       </div>
+      <span className="text-xs text-muted-foreground/60 shrink-0">
+        {formatTime12h(block.startTime)}
+      </span>
+    </button>
+  );
+
+  if (compact) {
+    // Compact inline version for sidebar or smaller spaces
+    return (
+      <div className="space-y-1">
+        {defaultTemplate.blocks.map((block) => renderBlock(block))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="pt-6 border-t border-border/20">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+          <Clock className="w-3.5 h-3.5" />
+          My Routine
+        </h3>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setIsEditing(!isEditing)}
+          className="h-7 text-xs gap-1"
+        >
+          <Edit2 className="w-3 h-3" />
+          {isEditing ? 'Done' : 'Edit'}
+        </Button>
+      </div>
+
+      <div className="space-y-4">
+        {(['morning', 'workday', 'evening'] as const).map((group) => {
+          const blocks = groupedBlocks[group];
+          if (blocks.length === 0) return null;
+
+          return (
+            <div key={group}>
+              <div className="flex items-center gap-2 mb-2">
+                <GroupIcon group={group} />
+                <span className="text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider">
+                  {groupLabels[group]}
+                </span>
+              </div>
+              <div className="bg-muted/20 rounded-lg px-2 py-1">
+                {blocks.map((block) => renderBlock(block))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {isEditing && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full mt-4 h-8 text-xs"
+          onClick={() => toast.info('Edit routine in Templates page')}
+        >
+          <Plus className="w-3 h-3 mr-1" />
+          Manage Routine
+        </Button>
+      )}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { DaySchedule, TimeBlock, Task, ArchivedTask, ScheduleTemplate } from '@/types';
+import { DaySchedule, TimeBlock, Task, ArchivedTask, ScheduleTemplate, User } from '@/types';
 import { format, subDays, differenceInDays, parseISO } from 'date-fns';
 import { supabaseService } from '@/services/supabaseService';
+import { getCurrentLocation, requestLocationPermission, getTimezoneFromLocation, UserLocation, LocationPermissionStatus } from '@/services/locationService';
 
 interface ScheduleState {
   tasks: Task[];
@@ -13,6 +14,10 @@ interface ScheduleState {
   user: { id: string; timezone: string } | null;
   selectedDate: string; // YYYY-MM-DD format
   needsOnboarding: boolean; // True if user has no schedule template
+
+  // Location-based settings
+  currentLocation: UserLocation | null;
+  locationPermission: LocationPermissionStatus;
 
   fetchInitialData: () => Promise<void>;
   addTask: (task: Task) => Promise<void>;
@@ -30,7 +35,12 @@ interface ScheduleState {
   initializeDayFromTemplate: (date: string, templateId: string) => Promise<void>;
   rolloverIncompleteTasks: () => Promise<void>;
   setSelectedDate: (date: string) => void;
-  completeOnboarding: () => void;
+  completeOnboarding: () => Promise<void>;
+  
+  // Location actions
+  setLocation: (location: UserLocation | null) => void;
+  setLocationPermission: (status: LocationPermissionStatus) => void;
+  requestLocationAccess: () => Promise<void>;
 }
 
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
@@ -43,7 +53,11 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   user: null,
   selectedDate: format(new Date(), 'yyyy-MM-dd'),
   needsOnboarding: true, // Start assuming onboarding is needed until proven otherwise
-
+  
+  // Location-based settings - defaults
+  currentLocation: null,
+  locationPermission: 'prompt',
+  
   fetchInitialData: async () => {
     set({ loading: true });
     try {
@@ -272,5 +286,34 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     // After onboarding is complete, re-fetch data to get the new templates
     // This ensures needsOnboarding is set to false before any navigation
     await get().fetchInitialData();
+    
+    // Try to get location after onboarding
+    try {
+      const location = await getCurrentLocation();
+      if (location) {
+        set({ currentLocation: location, locationPermission: 'granted' });
+      }
+    } catch (e) {
+      console.warn('Could not get location:', e);
+    }
+  },
+  
+  // Location actions
+  setLocation: async (location: UserLocation | null) => {
+    set({ currentLocation: location });
+  },
+  
+  setLocationPermission: (status: LocationPermissionStatus) => {
+    set({ locationPermission: status });
+  },
+  
+  requestLocationAccess: async () => {
+    const status = await requestLocationPermission();
+    set({ locationPermission: status });
+    
+    if (status === 'granted') {
+      const location = await getCurrentLocation();
+      set({ currentLocation: location });
+    }
   },
 }));

@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { AuthCard } from '@/components/auth/AuthCard';
 import { TimeBlock } from '@/types';
 import { formatTime12h } from '@/lib/scheduleHelpers';
-import { Moon, Sun, Briefcase, Dumbbell, Utensils, Heart, Check, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Moon, Sun, Briefcase, Dumbbell, Utensils, Heart, Check, ArrowRight, ArrowLeft, Sparkles, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { QuickPresets, SCHEDULE_PRESETS, type PresetOption } from './QuickPresets';
@@ -38,7 +38,7 @@ const STEPS = [
   { id: 'work', title: 'Work', icon: Briefcase },
   { id: 'workout', title: 'Workout', icon: Dumbbell },
   { id: 'lunch', title: 'Lunch', icon: Utensils },
-  { id: 'extra', title: 'Extra', icon: Heart },
+  { id: 'extra', title: 'Extra', icon: Plus },
   { id: 'preview', title: 'Preview', icon: Check },
 ];
 
@@ -187,6 +187,14 @@ export function OnboardingFlow() {
       // This must complete before navigation to prevent redirect loops
       const completeOnboarding = useScheduleStore.getState().completeOnboarding;
       await completeOnboarding();
+      
+      // Try to get location after onboarding
+      const requestLocationAccess = useScheduleStore.getState().requestLocationAccess;
+      try {
+        await requestLocationAccess();
+      } catch (e) {
+        // Location is optional, continue anyway
+      }
 
       // Use router.push for client-side navigation to preserve store state
       // window.location.href would cause full page reload and reinitialize the store
@@ -534,6 +542,11 @@ export function OnboardingFlow() {
     }
   };
 
+  // Handle clicking on progress step - navigate to any step
+  const handleStepClick = (index: number) => {
+    setCurrentStep(index);
+  };
+
   return (
     <AuthCard title="" subtitle="">
       <div className="max-w-md mx-auto">
@@ -542,7 +555,13 @@ export function OnboardingFlow() {
           {STEPS.map((step, index) => {
             const Icon = step.icon;
             return (
-              <div key={step.id} className="flex flex-col items-center">
+              <button
+                key={step.id}
+                onClick={() => handleStepClick(index)}
+                className={cn(
+                  "flex flex-col items-center transition-all cursor-pointer hover:opacity-80"
+                )}
+              >
                 <div className={cn(
                   "w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all",
                   index <= currentStep
@@ -557,7 +576,7 @@ export function OnboardingFlow() {
                 )}>
                   {step.title}
                 </span>
-              </div>
+              </button>
             );
           })}
         </div>
