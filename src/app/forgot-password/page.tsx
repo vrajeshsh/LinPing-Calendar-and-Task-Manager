@@ -50,7 +50,7 @@ export default function ForgotPasswordPage({
           </p>
         )}
 
-        <Button formAction={resetPassword} className="w-full h-10 rounded-xl" size="lg">
+        <Button formAction={resetPassword} type="submit" className="w-full h-10 rounded-xl" size="lg">
           Send Reset Link
         </Button>
 

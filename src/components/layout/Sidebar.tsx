@@ -8,7 +8,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { signOut } from '@/app/auth/actions';
 
 const NAV_ITEMS = [
-  { name: 'Today', href: '/app/today', icon: Home },
+  { name: 'Scheduler', href: '/app/today', icon: Home },
   { name: 'Calendar', href: '/app/calendar', icon: CalendarDays },
   { name: 'Tasks', href: '/app/tasks', icon: CheckSquare },
   { name: 'Insights', href: '/app/insights', icon: PieChart },

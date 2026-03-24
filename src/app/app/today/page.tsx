@@ -5,47 +5,81 @@ import { format, differenceInMinutes } from 'date-fns';
 import { useScheduleStore } from '@/store/useScheduleStore';
 import { DEFAULT_TEMPLATE } from '@/lib/defaultData';
 import { Timeline } from '@/components/timeline/Timeline';
-import { calculateAdherenceScore, parseTime, formatTime12h } from '@/lib/scheduleHelpers';
+import { calculateAdherenceScore, parseTime, formatTime12h, formatMinutes, getCurrentTimeInTimezone, parseTimeInTimezone } from '@/lib/scheduleHelpers';
 import { AlertTriangle, TrendingDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
-  const { schedules, initializeDayFromTemplate, rolloverIncompleteTasks, purgeOldArchived, loading } = useScheduleStore();
-  const today = format(new Date(), 'yyyy-MM-dd');
-  const todaySchedule = schedules[today];
+  const { schedules, initializeDayFromTemplate, rolloverIncompleteTasks, purgeOldArchived, loading, user, selectedDate, templates } = useScheduleStore();
+  const displayDate = selectedDate; // Use selectedDate from store
+  const displaySchedule = schedules[displayDate] || {
+    date: displayDate,
+    blocks: templates.length > 0 ? templates[0].blocks.map(b => ({
+      ...b,
+      id: crypto.randomUUID(),
+      status: 'pending' as const,
+    })) : DEFAULT_TEMPLATE.blocks.map(b => ({
+      ...b,
+      id: crypto.randomUUID(),
+      status: 'pending' as const,
+    })),
+    adherenceScore: 0
+  };
 
   useEffect(() => {
     setMounted(true);
     if (!mounted) return;
-    
-    const checkSchedule = async () => {
-      if (!useScheduleStore.getState().schedules[today]) {
-        await initializeDayFromTemplate(today, DEFAULT_TEMPLATE.id);
-      }
-      await rolloverIncompleteTasks();
-      await purgeOldArchived();
-    };
-    
-    checkSchedule();
-  }, [today, mounted, initializeDayFromTemplate, rolloverIncompleteTasks, purgeOldArchived]);
 
-  const score = todaySchedule ? calculateAdherenceScore(todaySchedule.blocks) : 0;
+    const ensureScheduleExists = async () => {
+      const state = useScheduleStore.getState();
+
+      // Always ensure we have a schedule for the selected date
+      if (!state.schedules[displayDate]) {
+        if (state.templates.length > 0) {
+          // Use existing template
+          try {
+            await initializeDayFromTemplate(displayDate, state.templates[0].id);
+          } catch (err) {
+            console.error('Failed to initialize schedule:', err);
+          }
+        } else {
+          // No templates yet - this shouldn't happen after onboarding, but handle gracefully
+          console.warn('No templates available for date:', displayDate);
+        }
+      }
+
+      // Only do rollover/purge if we're looking at today
+      if (displayDate === format(new Date(), 'yyyy-MM-dd')) {
+        try {
+          await rolloverIncompleteTasks();
+          await purgeOldArchived();
+        } catch (err) {
+          console.error('Error during rollover/purge:', err);
+        }
+      }
+    };
+
+    ensureScheduleExists();
+  }, [displayDate, mounted, initializeDayFromTemplate, rolloverIncompleteTasks, purgeOldArchived]);
+
+  const score = displaySchedule ? calculateAdherenceScore(displaySchedule.blocks) : 0;
 
   const timeDeptMinutes = useMemo(() => {
-    if (!todaySchedule) return 0;
-    const now = new Date();
+    if (!displaySchedule) return 0;
+    const now = user?.timezone ? getCurrentTimeInTimezone(user.timezone) : new Date();
     let debt = 0;
-    todaySchedule.blocks.forEach(b => {
+    displaySchedule.blocks.forEach(b => {
       if (b.status === 'delayed') {
-        const end = parseTime(b.endTime);
+        const end = user?.timezone ? parseTimeInTimezone(b.endTime, user.timezone) : parseTime(b.endTime);
         if (end < now) {
-          debt += differenceInMinutes(parseTime(b.endTime), parseTime(b.startTime));
+          const start = user?.timezone ? parseTimeInTimezone(b.startTime, user.timezone) : parseTime(b.startTime);
+          debt += differenceInMinutes(end, start);
         }
       }
     });
     return debt;
-  }, [todaySchedule]);
+  }, [displaySchedule, user?.timezone]);
 
   if (!mounted) return (
     <div className="flex items-center justify-center h-screen text-muted-foreground font-medium text-sm">
@@ -53,16 +87,20 @@ export default function Home() {
     </div>
   );
 
-  const now = new Date();
+  const now = user?.timezone ? getCurrentTimeInTimezone(user.timezone) : new Date();
   const timeStr = formatTime12h(format(now, 'HH:mm'));
+  const isViewingToday = displayDate === format(new Date(), 'yyyy-MM-dd');
+  // Parse date string as local date, not UTC (prevents timezone offset issues)
+  const [year, month, day] = displayDate.split('-').map(Number);
+  const displayDateObj = new Date(year, month - 1, day);
 
   return (
     <div className="flex flex-col h-full relative">
       <header className="px-5 md:px-8 pt-8 pb-4 md:pt-10 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Today</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">{isViewingToday ? 'Today' : 'Schedule'}</h1>
           <p className="text-muted-foreground mt-1 text-[15px] font-medium">
-            {format(now, 'EEEE, MMMM do')} · <span className="tabular-nums font-bold text-foreground">{timeStr}</span>
+            {format(displayDateObj, 'EEEE, MMMM do')} {isViewingToday && `· ${timeStr}`}
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">
@@ -81,14 +119,14 @@ export default function Home() {
           <TrendingDown className="w-4 h-4 text-amber-500 shrink-0" />
           <div>
             <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">
-              {timeDeptMinutes}m behind schedule
+              {formatMinutes(timeDeptMinutes)} behind schedule
             </p>
             <p className="text-[12px] text-amber-500/70 font-medium">Go to Tasks → AI bar to recover your day</p>
           </div>
         </div>
       )}
 
-      {todaySchedule?.blocks.some(b => b.status === 'skipped' && b.type === 'fixed') && (
+      {displaySchedule?.blocks.some(b => b.status === 'skipped' && b.type === 'fixed') && (
         <div className="mx-4 md:mx-8 mb-4 px-4 py-3 bg-destructive/10 border border-destructive/20 rounded-2xl flex items-center gap-3">
           <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />
           <p className="text-sm font-semibold text-destructive">A fixed block was skipped — your day may be off-track</p>
@@ -96,10 +134,20 @@ export default function Home() {
       )}
 
       <div className="flex-1 px-3 md:px-8 relative max-w-4xl w-full mx-auto pb-16">
-        {todaySchedule ? (
-          <Timeline schedule={todaySchedule} />
+        {displaySchedule ? (
+          <Timeline schedule={displaySchedule} />
         ) : (
-          <div className="text-muted-foreground pt-4 pl-4 font-medium">Initializing today&apos;s schedule...</div>
+          <div className="space-y-4">
+            {/* Skeleton loading state */}
+            <div className="animate-pulse">
+              <div className="h-16 bg-muted/50 rounded-xl mb-4"></div>
+              <div className="space-y-3">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="h-12 bg-muted/30 rounded-xl"></div>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

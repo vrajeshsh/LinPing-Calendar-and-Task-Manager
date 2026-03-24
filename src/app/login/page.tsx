@@ -39,7 +39,7 @@ export default function LoginPage({
           </p>
         )}
 
-        <Button formAction={login} className="w-full h-10 rounded-xl" size="lg">
+        <Button formAction={login} type="submit" className="w-full h-10 rounded-xl" size="lg">
           Sign In
         </Button>
 

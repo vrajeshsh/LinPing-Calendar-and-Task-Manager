@@ -4,6 +4,7 @@ create table public.profiles (
   full_name text,
   avatar_url text,
   onboarded boolean default false,
+  timezone text default 'America/New_York',
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
 

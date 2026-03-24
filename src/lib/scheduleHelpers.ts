@@ -1,5 +1,6 @@
 import { TimeBlock } from '@/types';
 import { parse, isBefore, isAfter } from 'date-fns';
+import { fromZonedTime, toZonedTime, format } from 'date-fns-tz';
 
 /** Convert "HH:mm" 24h → "h:mm AM/PM" */
 export function formatTime12h(time: string): string {
@@ -13,6 +14,31 @@ export function formatTime12h(time: string): string {
 
 export function parseTime(time: string): Date {
   return parse(time, 'HH:mm', new Date());
+}
+
+export function parseTimeInTimezone(time: string, timezone: string): Date {
+  const utcDate = parse(time, 'HH:mm', new Date());
+  return fromZonedTime(utcDate, timezone);
+}
+
+export function getCurrentTimeInTimezone(timezone: string): Date {
+  return toZonedTime(new Date(), timezone);
+}
+
+export function formatTimeInTimezone(date: Date, timezone: string, formatStr: string = 'HH:mm'): string {
+  return format(toZonedTime(date, timezone), formatStr, { timeZone: timezone });
+}
+
+export function formatMinutes(minutes: number): string {
+  if (minutes < 60) {
+    return `${minutes} mins`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (mins === 0) {
+    return `${hours} h`;
+  }
+  return `${hours} h ${mins} mins`;
 }
 
 export function isOverlap(block1: TimeBlock, block2: TimeBlock): boolean {

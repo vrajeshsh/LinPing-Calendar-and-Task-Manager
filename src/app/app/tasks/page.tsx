@@ -2,12 +2,15 @@
 
 import { useState } from 'react';
 import { useScheduleStore } from '@/store/useScheduleStore';
-import { Task, PriorityLevel } from '@/types';
+import { Task, PriorityLevel, TimeBlock } from '@/types';
 import { Send, Sparkles, Trash2, Pencil, Plus, X, Calendar, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { SmartCommandBar } from '@/components/SmartCommandBar';
+import { DefaultBlocks } from '@/components/DefaultBlocks';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
-// Priority meta — new 4-tier system
+// Priority meta — 4-tier system
 const PRIORITY_META: Record<PriorityLevel, { label: string; bar: string; badge: string; desc: string }> = {
   critical:  { label: 'Critical',  bar: 'bg-rose-500',         badge: 'bg-rose-500/15 text-rose-600 dark:text-rose-400',        desc: 'Must happen urgently' },
   important: { label: 'Important', bar: 'bg-orange-500',       badge: 'bg-orange-500/15 text-orange-600 dark:text-orange-400',   desc: 'Before all else' },
@@ -15,197 +18,113 @@ const PRIORITY_META: Record<PriorityLevel, { label: string; bar: string; badge: 
   low:       { label: 'Low',       bar: 'bg-muted-foreground/30', badge: 'bg-muted/50 text-muted-foreground',                    desc: 'Nice to have' },
 };
 
-// ─── AI Command Bar ──────────────────────────────────────────────────────────
-function AICommandBar() {
-  const [prompt, setPrompt] = useState('');
-  const [loading, setLoading] = useState(false);
-  const { schedules, tasks, saveSchedule } = useScheduleStore();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!prompt.trim()) return;
-    setLoading(true);
-    try {
-      const today = format(new Date(), 'yyyy-MM-dd');
-      const schedule = schedules[today];
-      const res = await fetch('/api/ai/schedule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, schedule, tasks, currentTime: format(new Date(), 'HH:mm') }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'AI request failed');
-      if (data.updatedBlocks) saveSchedule(today, { ...schedule, blocks: data.updatedBlocks });
-      if (data.warning) alert(`⚠ ${data.warning}`);
-      else if (data.explanation) alert(`✓ ${data.explanation}`);
-    } catch (err: any) {
-      alert(`AI Error: ${err.message}`);
-    } finally {
-      setLoading(false);
-      setPrompt('');
-    }
-  };
-
-  return (
-    <div className="mb-6">
-      <form onSubmit={handleSubmit}
-        className="flex items-center bg-card border border-border rounded-2xl p-2.5 transition-all focus-within:ring-4 focus-within:ring-primary/15 focus-within:border-primary/40 hover:border-border/70 shadow-sm"
-      >
-        <div className="w-11 h-11 rounded-[14px] bg-primary/10 text-primary flex items-center justify-center mr-3 shrink-0">
-          <Sparkles className="w-5 h-5" />
-        </div>
-        <input
-          type="text"
-          value={prompt}
-          onChange={e => setPrompt(e.target.value)}
-          placeholder='Try: "Add 45 min grocery run at 5:30 PM" or "Move study to 9 PM"'
-          className="flex-1 bg-transparent border-none focus:outline-none text-[15px] font-medium placeholder:text-muted-foreground/45"
-          disabled={loading}
-        />
-        <button type="submit" disabled={!prompt.trim() || loading}
-          className="w-11 h-11 flex items-center justify-center rounded-[14px] bg-primary text-primary-foreground disabled:opacity-40 transition-all hover:brightness-110 active:scale-95 shrink-0"
-        >
-          {loading
-            ? <div className="w-5 h-5 rounded-full border-[2.5px] border-primary-foreground/30 border-t-primary-foreground animate-spin" />
-            : <Send className="w-[18px] h-[18px] ml-0.5" />}
-        </button>
-      </form>
-      <p className="text-[10px] text-muted-foreground/50 font-medium mt-2 px-1">
-        AI respects fixed blocks (Sleep, Office, Gym) · Changes apply to today&apos;s timeline
-      </p>
-    </div>
-  );
-}
-
-// ─── Follow-up / Add Modal ───────────────────────────────────────────────────
-function TaskModal({ initialTitle = '', initialPriority = 'medium' as PriorityLevel, onSave, onClose, editingId }: {
-  initialTitle?: string;
+// Task Modal for editing
+function TaskModal({ 
+  initialTitle = '', 
+  initialPriority = 'medium' as PriorityLevel, 
+  editingId,
+  onSave,
+  onClose 
+}: { 
+  initialTitle?: string; 
   initialPriority?: PriorityLevel;
-  onSave: (task: Omit<Task, 'id'> & { id?: string }) => void;
-  onClose: () => void;
   editingId?: string;
+  onSave: (data: Omit<Task, 'id'> & { id?: string }) => void;
+  onClose: () => void;
 }) {
-  const { addBlockToSchedule } = useScheduleStore();
   const [title, setTitle] = useState(initialTitle);
-  const [duration, setDuration] = useState('30');
   const [priority, setPriority] = useState<PriorityLevel>(initialPriority);
-  const [scheduleIt, setScheduleIt] = useState(false);
-  const [scheduleDate, setScheduleDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [scheduleTime, setScheduleTime] = useState('17:00');
+  const [duration, setDuration] = useState('30');
 
-  const handleSave = () => {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
     if (!title.trim()) return;
-    const mins = parseInt(duration) || 30;
-    const taskData = { title, duration: mins, priority };
-
-    onSave(editingId ? { ...taskData, id: editingId } : taskData);
-
-    if (scheduleIt && !editingId) {
-      const [h, m] = scheduleTime.split(':').map(Number);
-      const totalMins = h * 60 + m + mins;
-      const endH = Math.floor(totalMins / 60) % 24;
-      const endM = totalMins % 60;
-      addBlockToSchedule(scheduleDate, {
-        id: crypto.randomUUID(),
-        title,
-        startTime: scheduleTime,
-        endTime: `${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}`,
-        type: 'flexible',
-        status: 'pending',
-      });
-    }
+    
+    onSave({
+      id: editingId,
+      title,
+      duration: parseInt(duration) || 30,
+      priority,
+    });
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md bg-card rounded-3xl border border-border shadow-2xl p-6 animate-in slide-in-from-bottom duration-300">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold">{editingId ? 'Edit Task' : 'New Task'}</h2>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-muted transition-colors text-muted-foreground">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="flex flex-col gap-4">
-          <input autoFocus
-            className="w-full px-4 py-3 bg-muted/30 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/30 text-[15px] font-medium transition-all"
-            placeholder="Task name..."
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-          />
-
-          {/* Duration */}
-          <div>
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Duration</p>
-            <div className="grid grid-cols-4 gap-1.5">
-              {['15','30','45','60'].map(m => (
-                <button key={m} onClick={() => setDuration(m)}
-                  className={cn("py-2 rounded-xl text-[12px] font-bold border transition-colors",
-                    duration === m ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"
-                  )}>{m}m</button>
-              ))}
-            </div>
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[425px] rounded-[24px]">
+        <DialogHeader>
+          <DialogTitle className="text-xl">{editingId ? 'Edit Task' : 'Quick Add Task'}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-6 pt-4">
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium text-muted-foreground">What do you need to do?</label>
+            <input 
+              autoFocus
+              className="w-full px-4 py-3 bg-muted/30 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary/30 transition-all font-medium"
+              placeholder="e.g., Review architecture docs"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+            />
           </div>
-
-          {/* Priority */}
-          <div>
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Priority</p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {(Object.entries(PRIORITY_META) as [PriorityLevel, typeof PRIORITY_META[PriorityLevel]][]).map(([p, meta]) => (
-                <button key={p} onClick={() => setPriority(p)}
-                  className={cn("py-2.5 px-3 rounded-xl text-[12px] font-bold border transition-all text-left flex flex-col gap-0.5",
-                    priority === p
-                      ? `${meta.badge} border-current shadow-sm`
-                      : "border-border hover:bg-muted text-muted-foreground"
+          
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium text-muted-foreground">Estimated Duration (mins)</label>
+            <div className="flex gap-2">
+              {['15', '30', '45', '60'].map(min => (
+                <button
+                  key={min}
+                  type="button"
+                  onClick={() => setDuration(min)}
+                  className={cn(
+                    "flex-1 py-2 rounded-xl text-sm font-medium transition-colors border",
+                    duration === min 
+                      ? "bg-primary text-primary-foreground border-primary" 
+                      : "bg-transparent border-border hover:bg-muted"
                   )}
                 >
-                  <span>{meta.label}</span>
-                  <span className="text-[9px] font-medium opacity-70">{meta.desc}</span>
+                  {min}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Schedule toggle (only for new tasks) */}
-          {!editingId && (
-            <div>
-              <button onClick={() => setScheduleIt(s => !s)}
-                className={cn("flex items-center gap-2 text-[12px] font-semibold transition-colors rounded-xl px-3 py-2 w-full",
-                  scheduleIt ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
-                )}
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                {scheduleIt ? 'Remove from calendar' : 'Add to calendar'}
-              </button>
-              {scheduleIt && (
-                <div className="flex gap-2 mt-2">
-                  <input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)}
-                    className="flex-1 px-3 py-2 bg-muted/30 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 text-[13px] font-medium" />
-                  <input type="time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)}
-                    className="w-28 px-3 py-2 bg-muted/30 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 text-[13px] font-medium tabular-nums" />
-                </div>
-              )}
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium text-muted-foreground">Priority</label>
+            <div className="flex gap-2">
+              {(['low', 'medium', 'important', 'critical'] as PriorityLevel[]).map(p => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPriority(p)}
+                  className={cn(
+                    "flex-1 py-2 rounded-xl text-sm font-medium transition-colors border capitalize",
+                    priority === p 
+                      ? "bg-foreground text-background border-foreground" 
+                      : "bg-transparent border-border hover:bg-muted"
+                  )}
+                >
+                  {p}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
-          <button onClick={handleSave} disabled={!title.trim()}
-            className="w-full h-12 bg-foreground text-background rounded-xl font-semibold text-[15px] hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center justify-center gap-2"
-          >
-            <Check className="w-4 h-4" />
-            {editingId ? 'Save Changes' : 'Create Task'}
+          <button type="submit" disabled={!title.trim()} className="w-full h-12 mt-4 bg-foreground text-background font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50">
+            {editingId ? 'Save Changes' : 'Add to Task Inbox'}
           </button>
-        </div>
-      </div>
-    </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function TasksPage() {
-  const { tasks, archivedTasks, deleteTask, addTask, updateTask, restoreTask } = useScheduleStore();
-  const [modal, setModal] = useState<{ type: 'new' | 'edit' | 'followup'; task?: Task } | null>(null);
+  const { tasks, archivedTasks, deleteTask, restoreTask, addTask, updateTask } = useScheduleStore();
   const [filter, setFilter] = useState<'all' | PriorityLevel>('all');
   const [showArchive, setShowArchive] = useState(false);
+  const [prompt, setPrompt] = useState('');
+  const [modal, setModal] = useState<{ type: 'new' | 'edit' | 'followup'; task?: Task } | null>(null);
 
   const filtered = filter === 'all' ? tasks : tasks.filter(t => t.priority === filter);
 
@@ -213,7 +132,7 @@ export default function TasksPage() {
     if (data.id) {
       updateTask(data.id, { title: data.title, duration: data.duration, priority: data.priority });
     } else {
-      addTask({ ...data, id: crypto.randomUUID() });
+      addTask({ ...data, id: crypto.randomUUID() } as Task);
     }
   };
 
@@ -224,22 +143,34 @@ export default function TasksPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <header className="px-5 md:px-8 py-8 md:py-10 flex items-end justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Tasks</h1>
-          <p className="text-muted-foreground mt-1 text-[15px] font-medium">
-            {tasks.length ? `${tasks.length} task${tasks.length !== 1 ? 's' : ''} in inbox` : 'Use the AI bar to add tasks'}
-          </p>
+      <header className="px-5 md:px-8 py-8 md:py-10">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight">Tasks</h1>
+            <p className="text-muted-foreground mt-1 text-[15px] font-medium">
+              {tasks.length ? `${tasks.length} task${tasks.length !== 1 ? 's' : ''} in inbox` : 'Use the command bar to add tasks'}
+            </p>
+          </div>
+          
+          {/* Quick add button - alternative to command bar */}
+          <button
+            onClick={() => setModal({ type: 'new' })}
+            className="md:hidden flex items-center gap-2 px-3 py-2 text-sm font-semibold bg-primary/10 text-primary rounded-xl hover:bg-primary/20 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Quick Add
+          </button>
         </div>
-        <button onClick={() => setModal({ type: 'new' })}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-foreground text-background text-[13px] font-semibold hover:opacity-90 active:scale-95 transition-all"
-        >
-          <Plus className="w-4 h-4" /> New Task
-        </button>
       </header>
 
       <div className="flex-1 px-4 md:px-8 max-w-3xl w-full mx-auto pb-16 flex flex-col">
-        <AICommandBar />
+        {/* Smart Command Bar - Primary Task Creation */}
+        <SmartCommandBar prompt={prompt} setPrompt={setPrompt} />
+        
+        {/* Show DefaultBlocks only on larger screens as supplementary */}
+        <div className="hidden md:block">
+          <DefaultBlocks />
+        </div>
 
         {/* Priority filter chips */}
         <div className="flex items-center gap-2 mb-5 flex-wrap">
@@ -253,9 +184,32 @@ export default function TasksPage() {
 
         {/* Task list */}
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground py-12">
-            <Sparkles className="w-10 h-10 opacity-20" />
-            <p className="font-medium text-sm">No tasks — ask the AI or tap &quot;New Task&quot;.</p>
+          <div className="flex flex-col items-center justify-center gap-6 text-muted-foreground py-16">
+            <div className="flex flex-col items-center gap-3">
+              <Sparkles className="w-12 h-12 opacity-30" />
+              <div className="text-center">
+                <p className="font-semibold text-base mb-1">Start building your task list</p>
+                <p className="text-sm opacity-75">Try typing something like:</p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 max-w-sm w-full">
+              {[
+                "Add 30 min walk after dinner",
+                "Schedule meeting tomorrow at 3pm",
+                "1 hour study session tonight"
+              ].map((example, i) => (
+                <button
+                  key={i}
+                  onClick={() => setPrompt(example)}
+                  className="text-left text-sm text-foreground/70 hover:text-foreground hover:bg-muted/50 p-3 rounded-xl border border-border/20 hover:border-border/40 transition-all duration-200"
+                >
+                  "{example}"
+                </button>
+              ))}
+            </div>
+            <p className="text-xs opacity-60 text-center max-w-xs">
+              Start typing in the command bar above
+            </p>
           </div>
         ) : (
           <div className="flex flex-col gap-2.5">

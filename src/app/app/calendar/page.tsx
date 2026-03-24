@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { useScheduleStore } from '@/store/useScheduleStore';
 import {
   format, startOfMonth, endOfMonth, eachDayOfInterval,
@@ -14,10 +15,32 @@ import { ChevronLeft, ChevronRight, CalendarDays, Grid2X2 } from 'lucide-react';
 type CalView = 'month' | 'year';
 
 export default function CalendarPage() {
+  const router = useRouter();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<CalView>('month');
   const [mounted, setMounted] = useState(false);
-  const schedules = useScheduleStore(state => state.schedules);
+  const { schedules, selectedDate, setSelectedDate, initializeDayFromTemplate, templates } = useScheduleStore();
+
+  useEffect(() => setMounted(true), []);
+
+  const handleDateClick = async (date: Date) => {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    setSelectedDate(dateStr);
+
+    // Immediately create schedule if it doesn't exist
+    const state = useScheduleStore.getState();
+    if (!state.schedules[dateStr] && state.templates.length > 0) {
+      try {
+        await initializeDayFromTemplate(dateStr, state.templates[0].id);
+      } catch (err) {
+        console.error('Failed to initialize day:', err);
+        // Continue anyway - the schedule page will handle fallback
+      }
+    }
+
+    // Navigate to the Scheduler/today view
+    router.push('/app/today');
+  };
 
   useEffect(() => setMounted(true), []);
 
@@ -100,19 +123,21 @@ export default function CalendarPage() {
 
       <div className="flex-1 px-4 md:px-8 max-w-6xl mx-auto w-full pb-16 overflow-auto">
         {view === 'month' ? (
-          <MonthView daysInMonth={daysInMonth} monthStart={monthStart} schedules={schedules} />
+          <MonthView daysInMonth={daysInMonth} monthStart={monthStart} schedules={schedules} onDateClick={handleDateClick} selectedDate={selectedDate} />
         ) : (
-          <YearView daysInYear={daysInYear} schedules={schedules} year={currentDate.getFullYear()} />
+          <YearView daysInYear={daysInYear} schedules={schedules} year={currentDate.getFullYear()} onDateClick={handleDateClick} selectedDate={selectedDate} />
         )}
       </div>
     </div>
   );
 }
 
-function MonthView({ daysInMonth, monthStart, schedules }: {
+function MonthView({ daysInMonth, monthStart, schedules, onDateClick, selectedDate }: {
   daysInMonth: Date[];
   monthStart: Date;
   schedules: Record<string, any>;
+  onDateClick: (date: Date) => Promise<void>;
+  selectedDate: string;
 }) {
   return (
     <div>
@@ -132,11 +157,14 @@ function MonthView({ daysInMonth, monthStart, schedules }: {
           const score = schedule ? calculateAdherenceScore(schedule.blocks) : null;
           const holiday = getHoliday(dateStr);
           return (
-            <div
+            <button
+              onClick={() => onDateClick(date)}
               key={dateStr}
               className={cn(
-                "h-20 md:h-28 rounded-2xl border p-2 flex flex-col transition-all duration-200 cursor-default",
-                isToday(date)
+                "h-20 md:h-28 rounded-2xl border p-2 flex flex-col transition-all duration-200 cursor-pointer hover:shadow-md active:scale-95",
+                dateStr === selectedDate
+                  ? "ring-2 ring-primary border-primary bg-primary/10 shadow-md"
+                  : isToday(date)
                   ? "ring-2 ring-primary border-transparent bg-primary/5"
                   : "bg-card/50 border-border/20 hover:border-border/50 hover:shadow-sm"
               )}
@@ -163,7 +191,7 @@ function MonthView({ daysInMonth, monthStart, schedules }: {
                   )}>{score}%</div>
                 )}
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -171,10 +199,12 @@ function MonthView({ daysInMonth, monthStart, schedules }: {
   );
 }
 
-function YearView({ daysInYear, schedules, year }: {
+function YearView({ daysInYear, schedules, year, onDateClick, selectedDate }: {
   daysInYear: Date[];
   schedules: Record<string, any>;
   year: number;
+  onDateClick: (date: Date) => Promise<void>;
+  selectedDate: string;
 }) {
   // Group days by month
   const months = useMemo(() => {
@@ -210,13 +240,15 @@ function YearView({ daysInYear, schedules, year }: {
                 const score = schedule ? calculateAdherenceScore(schedule.blocks) : null;
                 const holiday = getHoliday(dateStr);
                 return (
-                  <div
+                  <button
+                    onClick={() => onDateClick(date)}
                     key={dateStr}
                     title={holiday ? `${format(date, 'MMM d')} — ${holiday}` : format(date, 'MMM d')}
                     className={cn(
-                      "aspect-square rounded-sm flex items-center justify-center relative",
-                      isToday(date) ? "ring-1 ring-primary rounded-full" : "",
+                      "aspect-square rounded-sm flex items-center justify-center relative transition-all hover:shadow-sm active:scale-95 cursor-pointer",
+                      dateStr === selectedDate ? "ring-1 ring-primary ring-offset-1 ring-offset-background rounded-full" : isToday(date) ? "ring-1 ring-primary rounded-full" : "",
                       holiday ? "bg-rose-400/20" :
+                      dateStr === selectedDate ? "bg-primary/20" :
                       score === null ? "bg-muted/20" :
                       score >= 80 ? "bg-emerald-500/70" :
                       score >= 50 ? "bg-amber-500/60" :
@@ -230,7 +262,7 @@ function YearView({ daysInYear, schedules, year }: {
                     {holiday && (
                       <span className="absolute -top-0.5 -right-0.5 w-1 h-1 rounded-full bg-rose-400" />
                     )}
-                  </div>
+                  </button>
                 );
               })}
             </div>

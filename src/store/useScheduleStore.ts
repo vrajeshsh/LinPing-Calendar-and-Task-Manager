@@ -10,6 +10,8 @@ interface ScheduleState {
   schedules: Record<string, DaySchedule>;
   lastRolloverDate: string;
   loading: boolean;
+  user: { id: string; timezone: string } | null;
+  selectedDate: string; // YYYY-MM-DD format
 
   fetchInitialData: () => Promise<void>;
   addTask: (task: Task) => Promise<void>;
@@ -26,6 +28,7 @@ interface ScheduleState {
 
   initializeDayFromTemplate: (date: string, templateId: string) => Promise<void>;
   rolloverIncompleteTasks: () => Promise<void>;
+  setSelectedDate: (date: string) => void;
 }
 
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
@@ -35,16 +38,24 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   schedules: {},
   lastRolloverDate: '',
   loading: false,
+  user: null,
+  selectedDate: format(new Date(), 'yyyy-MM-dd'),
 
   fetchInitialData: async () => {
     set({ loading: true });
     try {
-      const [tasks, archived, templates] = await Promise.all([
+      const [tasks, archived, templates, profile] = await Promise.all([
         supabaseService.getTasks(),
         supabaseService.getArchivedTasks(),
         supabaseService.getTemplates(),
+        supabaseService.getProfile(),
       ]);
-      set({ tasks, archivedTasks: archived, templates });
+      set({ 
+        tasks, 
+        archivedTasks: archived, 
+        templates,
+        user: profile ? { id: profile.id, timezone: profile.timezone || 'America/New_York' } : null
+      });
     } catch (error) {
       console.error('Error fetching initial data:', error);
     } finally {
@@ -147,16 +158,25 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
 
   initializeDayFromTemplate: async (date, templateId) => {
     const template = get().templates.find(t => t.id === templateId);
-    if (!template) return;
-    const blocks: TimeBlock[] = template.blocks.map(b => ({
-      ...b,
-      id: crypto.randomUUID(),
-      status: 'pending' as const,
-    }));
-    await supabaseService.saveDaySchedule(date, blocks);
-    set(s => ({
-      schedules: { ...s.schedules, [date]: { date, blocks, adherenceScore: 0 } }
-    }));
+    if (!template || !template.blocks) {
+      console.warn(`Template ${templateId} not found or has no blocks`);
+      return;
+    }
+    
+    try {
+      const blocks: TimeBlock[] = template.blocks.map(b => ({
+        ...b,
+        id: crypto.randomUUID(),
+        status: 'pending' as const,
+      }));
+      await supabaseService.saveDaySchedule(date, blocks);
+      set(s => ({
+        schedules: { ...s.schedules, [date]: { date, blocks, adherenceScore: 0 } }
+      }));
+    } catch (error) {
+      console.error(`Error initializing day ${date}:`, error);
+      throw error;
+    }
   },
 
   rolloverIncompleteTasks: async () => {
@@ -208,5 +228,9 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     }
 
     set({ lastRolloverDate: today });
+  },
+
+  setSelectedDate: (date: string) => {
+    set({ selectedDate: date });
   },
 }));

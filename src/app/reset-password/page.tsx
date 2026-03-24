@@ -41,7 +41,7 @@ export default function ResetPasswordPage({
           </p>
         )}
 
-        <Button formAction={updatePassword} className="w-full h-10 rounded-xl" size="lg">
+        <Button formAction={updatePassword} type="submit" className="w-full h-10 rounded-xl" size="lg">
           Update Password
         </Button>
       </form>

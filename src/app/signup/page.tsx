@@ -31,7 +31,7 @@ export default function SignupPage({
           </p>
         )}
 
-        <Button formAction={signup} className="w-full h-10 rounded-xl" size="lg">
+        <Button formAction={signup} type="submit" className="w-full h-10 rounded-xl" size="lg">
           Create Account
         </Button>
 

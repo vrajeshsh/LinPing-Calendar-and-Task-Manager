@@ -81,6 +81,11 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  /* Nature-inspired accents */
+  --nature-sage: oklch(0.75 0.02 142);
+  --nature-green: oklch(0.7 0.05 142);
+  --nature-leaf: oklch(0.65 0.03 142);
+  --nature-muted: oklch(0.95 0.01 142);
 }
 
 .dark {

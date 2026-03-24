@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { DaySchedule, TimeBlock } from '@/types';
 import { TimelineBlock } from './TimelineBlock';
-import { parseTime, formatTime12h } from '@/lib/scheduleHelpers';
+import { parseTime, formatTime12h, formatMinutes, getCurrentTimeInTimezone, parseTimeInTimezone } from '@/lib/scheduleHelpers';
 import { differenceInMinutes } from 'date-fns';
 import { useScheduleStore } from '@/store/useScheduleStore';
 import { cn } from '@/lib/utils';
@@ -17,12 +17,16 @@ function isFixed(b: TimeBlock) {
 export function Timeline({ schedule }: { schedule: DaySchedule }) {
   const [now, setNow] = useState(new Date());
   const reorderBlocks = useScheduleStore(s => s.reorderBlocks);
+  const user = useScheduleStore(s => s.user);
   const dragIndexRef = useRef<number | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 10_000);
+    const t = setInterval(() => {
+      setNow(user?.timezone ? getCurrentTimeInTimezone(user.timezone) : new Date());
+    }, 10_000);
     return () => clearInterval(t);
-  }, []);
+  }, [user?.timezone]);
 
   // Sort: Sleep always last, rest chronological
   const sortedBlocks = useMemo(() => {
@@ -51,8 +55,9 @@ export function Timeline({ schedule }: { schedule: DaySchedule }) {
   }, [sortedBlocks]);
 
   // Drag handlers
-  const handleDragStart = (e: React.DragEvent, idx: number) => {
+  const handleDragStart = (e: React.DragEvent, idx: number, blockId: string) => {
     dragIndexRef.current = idx;
+    setDraggingId(blockId);
     e.dataTransfer.effectAllowed = 'move';
   };
 
@@ -85,6 +90,12 @@ export function Timeline({ schedule }: { schedule: DaySchedule }) {
 
     reorderBlocks(schedule.date, newBlocksWithTimes);
     dragIndexRef.current = null;
+    setDraggingId(null);
+  };
+
+  const handleDragEnd = () => {
+    dragIndexRef.current = null;
+    setDraggingId(null);
   };
 
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
@@ -101,7 +112,7 @@ export function Timeline({ schedule }: { schedule: DaySchedule }) {
               <div className="flex-1 flex items-center gap-2">
                 <div className="h-px flex-1 border-t border-dashed border-border/30" />
                 <span className="text-[9px] font-bold tracking-widest uppercase text-muted-foreground/40 whitespace-nowrap px-2 py-0.5 rounded-full bg-muted/20">
-                  {item.mins}m free · {formatTime12h(item.start!)} – {formatTime12h(item.end!)}
+                  {formatMinutes(item.mins!)} free · {formatTime12h(item.start!)} – {formatTime12h(item.end!)}
                 </span>
                 <div className="h-px flex-1 border-t border-dashed border-border/30" />
               </div>
@@ -112,8 +123,8 @@ export function Timeline({ schedule }: { schedule: DaySchedule }) {
         const block = item.block!;
         // Find block index in sortedBlocks for drag
         const blockIdx = sortedBlocks.findIndex(b => b.id === block.id);
-        const start = parseTime(block.startTime);
-        let end = parseTime(block.endTime);
+        const start = user?.timezone ? parseTimeInTimezone(block.startTime, user.timezone) : parseTime(block.startTime);
+        let end = user?.timezone ? parseTimeInTimezone(block.endTime, user.timezone) : parseTime(block.endTime);
         if (end < start) {
           end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
           if (now.getHours() < 12 && start.getHours() >= 12) {
@@ -129,12 +140,14 @@ export function Timeline({ schedule }: { schedule: DaySchedule }) {
           <div
             key={block.id}
             draggable={canDrag}
-            onDragStart={canDrag ? (e) => handleDragStart(e, blockIdx) : undefined}
+            onDragStart={canDrag ? (e) => handleDragStart(e, blockIdx, block.id) : undefined}
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, blockIdx)}
+            onDragEnd={handleDragEnd}
             className={cn(
               "group/drag",
-              canDrag ? "cursor-grab active:cursor-grabbing" : ""
+              canDrag ? "cursor-grab active:cursor-grabbing" : "",
+              draggingId === block.id && "opacity-50"
             )}
           >
             {/* Drag handle hint */}

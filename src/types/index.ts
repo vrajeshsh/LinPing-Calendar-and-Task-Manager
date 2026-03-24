@@ -43,6 +43,7 @@ export interface ScheduleTemplate {
 export interface User {
   id: string;
   name: string;
+  timezone: string;
   preferences: {
     startOfDay: string;
     endOfDay: string;
