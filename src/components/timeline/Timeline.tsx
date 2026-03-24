@@ -3,17 +3,12 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { DaySchedule, TimeBlock } from '@/types';
 import { TimelineBlock } from './TimelineBlock';
-import { parseTime, formatTime12h, formatMinutes, getCurrentTimeInTimezone, parseTimeInTimezone } from '@/lib/scheduleHelpers';
+import { parseTime, normalizeTimeString, fromMinutes, toMinutes, formatTime12h, formatMinutes, getCurrentTimeInTimezone, parseTimeInTimezone } from '@/lib/scheduleHelpers';
 import { differenceInMinutes, format } from 'date-fns';
 import { useScheduleStore } from '@/store/useScheduleStore';
 import { cn } from '@/lib/utils';
 import { GripVertical, Sunrise, Sunset } from 'lucide-react';
 import { getSunTimes, formatTime12h as formatSunTime, getDefaultLocation } from '@/services/locationService';
-
-const FIXED_TITLES = ['sleep', 'office', 'gym'];
-function isFixed(b: TimeBlock) {
-  return b.type === 'fixed' || FIXED_TITLES.some(t => b.title.toLowerCase().includes(t));
-}
 
 export function Timeline({ schedule }: { schedule: DaySchedule }) {
   const [now, setNow] = useState(new Date());
@@ -23,7 +18,11 @@ export function Timeline({ schedule }: { schedule: DaySchedule }) {
   const locationPermission = useScheduleStore(s => s.locationPermission);
   const dragIndexRef = useRef<number | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [dropPreview, setDropPreview] = useState<{ index: number; type: 'insert' | 'replace' } | null>(null);
+  const [movingBlockId, setMovingBlockId] = useState<string | null>(null);
+  const [selectedTargetIndex, setSelectedTargetIndex] = useState<number | null>(null);
+  const [movePreview, setMovePreview] = useState<{from: number; to: number; blocks: TimeBlock[]} | null>(null);
 
   // Check if we're viewing today - only today gets progress tracking
   const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -45,71 +44,72 @@ export function Timeline({ schedule }: { schedule: DaySchedule }) {
     return () => clearInterval(t);
   }, [user?.timezone]);
 
-  // Sort: Sleep always last, rest chronological
-  const sortedBlocks = useMemo(() => {
-    return [...schedule.blocks].sort((a, b) => {
-      if (a.title.toLowerCase() === 'sleep') return 1;
-      if (b.title.toLowerCase() === 'sleep') return -1;
-      return parseTime(a.startTime).getTime() - parseTime(b.startTime).getTime();
+  const normalizedBlocks = useMemo(() => {
+    return schedule.blocks.map(block => {
+      const startTime = normalizeTimeString(block.startTime);
+      const endTime = normalizeTimeString(block.endTime);
+      let duration = toMinutes(endTime) - toMinutes(startTime);
+      if (duration <= 0) duration = 30;
+
+      const sanitizedEnd = fromMinutes(toMinutes(startTime) + duration);
+      return {
+        ...block,
+        startTime,
+        endTime: sanitizedEnd
+      };
     });
   }, [schedule.blocks]);
 
-  // Build items with free-time gap labels (excluding sleep blocks)
+  // Sort: sleep boundaries separate from actionable blocks
+  const sortedBlocks = useMemo(() => {
+    return [...normalizedBlocks]
+      .filter(b => b.title.toLowerCase() !== 'sleep')
+      .sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
+  }, [normalizedBlocks]);
+
+  const sleepBlock = useMemo(() => {
+    return normalizedBlocks.find(b => b.title.toLowerCase() === 'sleep');
+  }, [normalizedBlocks]);
+
   const timelineItems = useMemo(() => {
-    const items: Array<{ type: 'block' | 'free' | 'sleep-message'; block?: TimeBlock; start?: string; end?: string; mins?: number; message?: string }> = [];
-    
-    // Find sleep block first - we'll show it as a message at start or end
-    const sleepBlock = sortedBlocks.find(b => b.title.toLowerCase() === 'sleep');
-    const nonSleepBlocks = sortedBlocks.filter(b => b.title.toLowerCase() !== 'sleep');
-    
-    // Add sleep message at start (if sleep starts before 10am) or end of day
+    const items: Array<{ type: 'block' | 'free' | 'sleep-boundary'; block?: TimeBlock; start?: string; end?: string; mins?: number; message?: string }> = [];
+
+    const wakeUpTime = sleepBlock ? sleepBlock.endTime : '06:00';
+    const sleepStartTime = sleepBlock ? sleepBlock.startTime : '23:00';
+
     if (sleepBlock) {
-      const sleepStart = parseTime(sleepBlock.startTime);
-      const sleepHour = sleepStart.getHours();
-      
-      // If sleep starts after midnight and before 10am, show wake up message at start
-      if (sleepHour >= 0 && sleepHour < 10) {
-        items.push({ 
-          type: 'sleep-message', 
-          start: sleepBlock.startTime,
-          message: 'Wake up'
-        });
-      } else {
-        // Show sleep message at end of day
-        items.push({ 
-          type: 'sleep-message', 
-          start: sleepBlock.endTime,
-          message: 'Sleep'
-        });
+      const sleepStartMinutes = toMinutes(sleepBlock.startTime);
+      // if sleep starts early morning, show wake up marker at top
+      if (sleepStartMinutes < 10 * 60) {
+        items.push({ type: 'sleep-boundary', start: wakeUpTime, message: `WAKE UP ${formatTime12h(wakeUpTime)}` });
       }
     }
-    
-    for (let i = 0; i < nonSleepBlocks.length; i++) {
-      const block = nonSleepBlocks[i];
+
+    for (let i = 0; i < sortedBlocks.length; i++) {
+      const block = sortedBlocks[i];
       items.push({ type: 'block', block });
-      const next = nonSleepBlocks[i + 1];
+      const next = sortedBlocks[i + 1];
       if (next) {
-        const gap = differenceInMinutes(parseTime(next.startTime), parseTime(block.endTime));
+        const gap = toMinutes(next.startTime) - toMinutes(block.endTime);
         if (gap > 0 && gap < 90) {
           items.push({ type: 'free', start: block.endTime, end: next.startTime, mins: gap });
         }
       }
     }
-    
-    // Add sleep message at end if not already added (for late night sleep)
+
     if (sleepBlock) {
-      const existingSleepMessage = items.find(i => i.type === 'sleep-message');
-      if (!existingSleepMessage) {
-        items.push({ 
-          type: 'sleep-message', 
-          start: sleepBlock.endTime,
-          message: 'Sleep'
-        });
+      const hasWakeUp = items.some(item => item.type === 'sleep-boundary' && item.message?.startsWith('WAKE UP'));
+      if (!hasWakeUp) {
+        items.push({ type: 'sleep-boundary', start: sleepStartTime, message: `SLEEP ${formatTime12h(sleepStartTime)}` });
+      } else {
+        if (toMinutes(sleepStartTime) > 0) {
+          items.push({ type: 'sleep-boundary', start: sleepStartTime, message: `SLEEP ${formatTime12h(sleepStartTime)}` });
+        }
       }
     }
-    
+
     return items;
-  }, [sortedBlocks]);
+  }, [sortedBlocks, sleepBlock]);
 
   // Drag handlers
   const handleDragStart = (e: React.DragEvent, idx: number, blockId: string) => {
@@ -121,73 +121,193 @@ export function Timeline({ schedule }: { schedule: DaySchedule }) {
     e.dataTransfer.setDragImage(target, 0, 20);
   };
 
-  const handleDrop = (e: React.DragEvent, dropIdx: number) => {
+  const handleDragOver = (e: React.DragEvent, targetIndex: number, type: 'insert' | 'replace' = 'insert') => {
     e.preventDefault();
-    const dragIdx = dragIndexRef.current;
-    if (dragIdx === null || dragIdx === dropIdx) return;
-
-    const dragged = sortedBlocks[dragIdx];
-    // All blocks are now movable - remove fixed block restriction
-    // Smart rebalancing: calculate new times based on drop position
-    const newBlocks = [...sortedBlocks];
-    newBlocks.splice(dragIdx, 1);
-    newBlocks.splice(dropIdx, 0, dragged);
-
-    // Rebalance all blocks to have proper, non-overlapping times
-    const newBlocksWithTimes = rebalanceBlocks(newBlocks);
-
-    reorderBlocks(schedule.date, newBlocksWithTimes);
-    dragIndexRef.current = null;
-    setDraggingId(null);
-    setDragOverId(null);
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(targetIndex);
+    setDropPreview({ index: targetIndex, type });
   };
 
-  // Rebalance blocks - ensures no overlaps and maintains sensible spacing
-  const rebalanceBlocks = (blocks: TimeBlock[]): TimeBlock[] => {
-    if (blocks.length === 0) return [];
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+    setDropPreview(null);
+  };
 
-    // Filter out sleep for rebalancing purposes
-    const nonSleepBlocks = blocks.filter(b => b.title.toLowerCase() !== 'sleep');
-    const sleepBlock = blocks.find(b => b.title.toLowerCase() === 'sleep');
+  const handleDrop = (e: React.DragEvent, dropIndex: number, dropType: 'insert' | 'replace' = 'insert') => {
+    e.preventDefault();
+    const dragIdx = dragIndexRef.current;
+    if (dragIdx === null) return;
 
-    // Sort by start time
-    nonSleepBlocks.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const draggedBlock = sortedBlocks[dragIdx];
+    if (!draggedBlock) return;
 
-    let currentTime = '06:00'; // Start day at 6am
+    // Create new blocks array without the dragged block
+    const newBlocks = sortedBlocks.filter((_, idx) => idx !== dragIdx);
 
-    const balanced = nonSleepBlocks.map(block => {
-      const duration = getBlockDuration(block);
-      const startTime = currentTime;
-      const endTime = addMinutesToTime(currentTime, duration);
+    let finalBlocks: TimeBlock[];
 
-      currentTime = endTime;
+    if (dropType === 'insert') {
+      // Insert the block at the specified position and shift subsequent blocks
+      newBlocks.splice(dropIndex, 0, draggedBlock);
+      finalBlocks = shiftBlocksAfterInsertion(newBlocks, dropIndex);
+    } else {
+      // Replace: swap positions
+      if (dropIndex < newBlocks.length) {
+        newBlocks.splice(dropIndex, 0, draggedBlock);
+        finalBlocks = shiftBlocksAfterInsertion(newBlocks, dropIndex);
+      } else {
+        finalBlocks = [...newBlocks, draggedBlock];
+      }
+    }
+
+    // Add sleep block back if it exists
+    if (sleepBlock) {
+      finalBlocks.push(sleepBlock);
+    }
+
+    reorderBlocks(schedule.date, finalBlocks);
+    dragIndexRef.current = null;
+    setDraggingId(null);
+    setDragOverIndex(null);
+    setDropPreview(null);
+  };
+
+  const handleDragEnd = () => {
+    dragIndexRef.current = null;
+    setDraggingId(null);
+    setDragOverIndex(null);
+    setDropPreview(null);
+  };
+
+  const getWakeTime = (): string => sleepBlock?.endTime ?? '06:00';
+  const getSleepTime = (): string => sleepBlock?.startTime ?? '23:00';
+
+  const recalcSchedule = (blocks: TimeBlock[]): TimeBlock[] => {
+    let currentTime = getWakeTime();
+    const sleepCutoff = toMinutes(getSleepTime());
+
+    const adjusted = blocks.map(block => {
+      const startTime = normalizeTimeString(block.startTime);
+      const endTime = normalizeTimeString(block.endTime);
+      let duration = toMinutes(endTime) - toMinutes(startTime);
+      if (duration <= 0 || !Number.isFinite(duration)) duration = 30;
+
+      const recalculatedStart = currentTime;
+      const recalculatedEnd = fromMinutes(toMinutes(recalculatedStart) + duration);
+
+      currentTime = recalculatedEnd;
 
       return {
         ...block,
-        startTime,
-        endTime
+        startTime: recalculatedStart,
+        endTime: recalculatedEnd
       };
     });
 
-    // Add sleep block back at the end
+    // Prevent anything from extending into sleep
     if (sleepBlock) {
-      balanced.push({
-        ...sleepBlock,
-        startTime: currentTime,
-        endTime: '23:00'
+      return adjusted.map(block => {
+        const blockEndMin = toMinutes(block.endTime);
+        if (blockEndMin > sleepCutoff) {
+          const blockStartMin = toMinutes(block.startTime);
+          const cappedStart = Math.min(blockStartMin, sleepCutoff);
+          const cappedEnd = Math.min(blockEndMin, sleepCutoff);
+          return {
+            ...block,
+            startTime: fromMinutes(cappedStart),
+            endTime: fromMinutes(cappedEnd)
+          };
+        }
+        return block;
       });
     }
 
-    return balanced;
+    return adjusted;
   };
 
-  // Get duration in minutes from block
-  const getBlockDuration = (block: TimeBlock): number => {
-    const [startH, startM] = block.startTime.split(':').map(Number);
-    const [endH, endM] = block.endTime.split(':').map(Number);
-    const startMins = startH * 60 + startM;
-    const endMins = endH * 60 + endM;
-    return endMins - startMins;
+  const executeMove = (targetIndex: number) => {
+    if (!movingBlockId) return;
+    const sourceIndex = sortedBlocks.findIndex(b => b.id === movingBlockId);
+    if (sourceIndex === -1) return;
+
+    const movingBlock = sortedBlocks[sourceIndex];
+    const blocksWithoutMovement = sortedBlocks.filter(b => b.id !== movingBlockId);
+
+    let adjustedTarget = targetIndex;
+    if (sourceIndex < targetIndex) adjustedTarget -= 1;
+    adjustedTarget = Math.max(0, Math.min(blocksWithoutMovement.length, adjustedTarget));
+
+    blocksWithoutMovement.splice(adjustedTarget, 0, movingBlock);
+    const rebalanced = recalcSchedule(blocksWithoutMovement);
+    const finalBlocks = sleepBlock ? [...rebalanced, sleepBlock] : rebalanced;
+
+    reorderBlocks(schedule.date, finalBlocks);
+    setMovingBlockId(null);
+    setSelectedTargetIndex(null);
+    setMovePreview(null);
+  };
+
+  const checkMoveTarget = (targetIndex: number) => {
+    if (!movingBlockId) return;
+    const sourceIndex = sortedBlocks.findIndex(b => b.id === movingBlockId);
+    if (sourceIndex === -1) return;
+
+    setSelectedTargetIndex(targetIndex);
+    const previewBlocks = sortedBlocks.filter(b => b.id !== movingBlockId);
+    const adjustedTarget = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    previewBlocks.splice(Math.max(0, Math.min(previewBlocks.length, adjustedTarget)), 0, sortedBlocks[sourceIndex]);
+    setMovePreview({ from: sourceIndex, to: targetIndex, blocks: recalcSchedule(previewBlocks) });
+  };
+
+  // Smart shifting: when inserting a block, place it at the insertion point and shift subsequent blocks
+  const shiftBlocksAfterInsertion = (blocks: TimeBlock[], insertIndex: number): TimeBlock[] => {
+    if (insertIndex >= blocks.length - 1) return blocks; // Inserting at end, no shift needed
+
+    const insertedBlock = blocks[insertIndex];
+    const duration = differenceInMinutes(parseTime(insertedBlock.endTime), parseTime(insertedBlock.startTime));
+
+    // For insertion, determine the correct start time based on position
+    let newStartTime: string;
+    if (insertIndex === 0) {
+      // Inserting at the beginning - start at 6am or after sleep
+      newStartTime = sleepBlock && sleepBlock.endTime < '12:00' ? sleepBlock.endTime : '06:00';
+    } else {
+      // Inserting after another block - start right after the previous block
+      const prevBlock = blocks[insertIndex - 1];
+      newStartTime = prevBlock.endTime;
+    }
+
+    // Update the inserted block's times
+    const updatedInsertedBlock = {
+      ...insertedBlock,
+      startTime: newStartTime,
+      endTime: addMinutesToTime(newStartTime, duration)
+    };
+
+    // Replace the inserted block with updated times
+    const blocksWithUpdatedInsert = [...blocks];
+    blocksWithUpdatedInsert[insertIndex] = updatedInsertedBlock;
+
+    // Shift all blocks after the insertion point by the duration
+    return blocksWithUpdatedInsert.map((block, idx) => {
+      if (idx <= insertIndex) return block; // Don't shift the inserted block or earlier ones
+
+      const blockStart = parseTime(block.startTime);
+      const blockEnd = parseTime(block.endTime);
+      const newStart = new Date(blockStart.getTime() + duration * 60 * 1000);
+      const newEnd = new Date(blockEnd.getTime() + duration * 60 * 1000);
+
+      return {
+        ...block,
+        startTime: formatTime(newStart),
+        endTime: formatTime(newEnd)
+      };
+    });
+  };
+
+  // Helper to format time for blocks
+  const formatTime = (date: Date): string => {
+    return date.toTimeString().slice(0, 5);
   };
 
   // Add minutes to time string
@@ -197,24 +317,6 @@ export function Timeline({ schedule }: { schedule: DaySchedule }) {
     const newHours = Math.floor(totalMins / 60) % 24;
     const newMins = totalMins % 60;
     return `${newHours.toString().padStart(2, '0')}:${newMins.toString().padStart(2, '0')}`;
-  };
-
-  const handleDragEnd = () => {
-    dragIndexRef.current = null;
-    setDraggingId(null);
-    setDragOverId(null);
-  };
-
-  const handleDragOver = (e: React.DragEvent, blockId?: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (blockId) {
-      setDragOverId(blockId);
-    }
-  };
-
-  const handleDragLeave = () => {
-    setDragOverId(null);
   };
 
   return (
@@ -290,11 +392,11 @@ export function Timeline({ schedule }: { schedule: DaySchedule }) {
             );
           }
           
-          // Sleep message - lightweight inline indicator
-          if (item.type === 'sleep-message') {
-            const isSleep = item.message === 'Sleep';
+          // Sleep boundary - lightweight schedule boundary marker
+          if (item.type === 'sleep-boundary') {
+            const isWakeUp = item.message?.startsWith('WAKE UP');
             return (
-              <div key={`sleep-${idx}`} className="flex items-center pl-0 md:pl-[104px] relative">
+              <div key={`sleep-boundary-${idx}`} className="flex items-center pl-0 md:pl-[104px] relative">
                 {/* Time column */}
                 <div className="w-14 md:w-20 shrink-0 text-right flex flex-col items-end pr-3">
                   <span className="text-[13px] font-semibold text-muted-foreground/40 tabular-nums tracking-tight">
@@ -303,15 +405,18 @@ export function Timeline({ schedule }: { schedule: DaySchedule }) {
                 </div>
                 {/* Node dot */}
                 <div className="hidden md:flex flex-col items-center shrink-0">
-                  <div className="w-2 h-2 rounded-full bg-indigo-300/40" />
+                  <div className={cn(
+                    "w-2 h-2 rounded-full",
+                    isWakeUp ? "bg-amber-300/40" : "bg-indigo-300/40"
+                  )} />
                 </div>
-                {/* Message */}
+                {/* Boundary message */}
                 <div className="flex-1 ml-4">
                   <span className={cn(
-                    "text-[11px] font-medium tracking-wide",
-                    isSleep ? "text-indigo-400/60" : "text-amber-400/60"
+                    "text-[11px] font-medium tracking-wide uppercase",
+                    isWakeUp ? "text-amber-400/60" : "text-indigo-400/60"
                   )}>
-                    {isSleep ? '🌙' : '☀️'} {item.message} at {formatTime12h(item.start!)}
+                    {isWakeUp ? '☀️' : '🌙'} {item.message}
                   </span>
                 </div>
               </div>
@@ -319,7 +424,6 @@ export function Timeline({ schedule }: { schedule: DaySchedule }) {
           }
 
           const block = item.block!;
-          // Find block index in sortedBlocks for drag
           const blockIdx = sortedBlocks.findIndex(b => b.id === block.id);
           const start = user?.timezone ? parseTimeInTimezone(block.startTime, user.timezone) : parseTime(block.startTime);
           let end = user?.timezone ? parseTimeInTimezone(block.endTime, user.timezone) : parseTime(block.endTime);
@@ -330,50 +434,71 @@ export function Timeline({ schedule }: { schedule: DaySchedule }) {
               end.setTime(end.getTime() - 24 * 60 * 60 * 1000);
             }
           }
-          // Only calculate active/past for TODAY's schedule
           const isActive = isTodaySchedule && now >= start && now < end;
           const isPast = isTodaySchedule && now >= end;
-          const canDrag = !isFixed(block);
+
+          const isMovingThis = movingBlockId === block.id;
 
           return (
-            <div
-              key={block.id}
-              draggable={canDrag}
-              onDragStart={canDrag ? (e) => handleDragStart(e, blockIdx, block.id) : undefined}
-              onDragOver={(e) => handleDragOver(e, block.id)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, blockIdx)}
-              onDragEnd={handleDragEnd}
-              className={cn(
-                "group/drag relative transition-all duration-300 ease-out",
-                canDrag ? "cursor-grab active:cursor-grabbing hover:scale-[1.02] hover:shadow-md" : "",
-                draggingId === block.id && "opacity-40 scale-95 rotate-1 shadow-lg",
-                dragOverId === block.id && draggingId && "ring-2 ring-primary/50 ring-offset-2 ring-offset-background scale-[1.01]"
+            <div key={block.id}>
+              {movingBlockId && movingBlockId !== block.id && (
+                <div
+                  className={cn(
+                    'p-2 cursor-pointer border border-dashed rounded-lg mb-2 transition-all',
+                    selectedTargetIndex === blockIdx ? 'bg-primary/10 border-primary' : 'bg-background/50 hover:bg-primary/5'
+                  )}
+                  onMouseEnter={() => checkMoveTarget(blockIdx)}
+                  onClick={() => executeMove(blockIdx)}
+                >
+                  <span className="text-[11px] font-semibold text-primary/80">Place here before "{block.title}"</span>
+                </div>
               )}
-            >
-              {/* Enhanced drag handle hint */}
-              {canDrag && (
+
+              <div
+                draggable={true}
+                onClick={() => !draggingId && setMovingBlockId(block.id)}
+                onDragStart={(e) => handleDragStart(e, blockIdx, block.id)}
+                onDragOver={(e) => handleDragOver(e, blockIdx, 'replace')}
+                onDrop={(e) => handleDrop(e, blockIdx, 'replace')}
+                onDragEnd={handleDragEnd}
+                className={cn(
+                  'group/drag relative transition-all duration-300 ease-out',
+                  'cursor-grab active:cursor-grabbing hover:scale-[1.02] hover:shadow-md',
+                  isMovingThis && 'ring-2 ring-primary/60 shadow-lg',
+                  draggingId === block.id && 'opacity-40 scale-95 rotate-1 shadow-lg',
+                  dragOverIndex === blockIdx && dropPreview?.type === 'replace' && draggingId && 'ring-2 ring-primary/50 ring-offset-2 ring-offset-background scale-[1.01]'
+                )}
+              >
                 <div className="hidden md:flex absolute -left-4 top-1/2 -translate-y-1/2 opacity-0 group-hover/drag:opacity-80 transition-all duration-300 z-20">
                   <div className="p-1.5 rounded-md bg-background/90 backdrop-blur-sm border border-border/50 shadow-lg transform group-hover/drag:scale-110">
                     <GripVertical className="w-3.5 h-3.5 text-muted-foreground group-hover/drag:text-primary transition-colors duration-200" />
                   </div>
                 </div>
-              )}
 
-              {/* Block container with refined spacing */}
-              <div className="relative pl-0 md:pl-[104px]">
-                <TimelineBlock
-                  block={block}
-                  isActive={isActive}
-                  isPast={isPast}
-                  now={now}
-                  date={schedule.date}
-                  isTodaySchedule={isTodaySchedule}
-                />
+                <div className="relative pl-0 md:pl-[104px]">
+                  <TimelineBlock
+                    block={block}
+                    isActive={isActive}
+                    isPast={isPast}
+                    now={now}
+                    date={schedule.date}
+                    isTodaySchedule={isTodaySchedule}
+                  />
+                </div>
               </div>
             </div>
           );
         })}
+
+        {movingBlockId && (
+          <div
+            className="p-2 cursor-pointer border border-dashed rounded-lg transition-all bg-background/50 hover:bg-primary/5"
+            onMouseEnter={() => checkMoveTarget(sortedBlocks.length)}
+            onClick={() => executeMove(sortedBlocks.length)}
+          >
+            <span className="text-[11px] font-semibold text-primary/80">Place here at end of day</span>
+          </div>
+        )}
       </div>
     </div>
   );

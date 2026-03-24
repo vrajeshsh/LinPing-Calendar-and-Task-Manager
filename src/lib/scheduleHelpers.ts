@@ -3,17 +3,54 @@ import { parse, isBefore, isAfter } from 'date-fns';
 import { fromZonedTime, toZonedTime, format } from 'date-fns-tz';
 
 /** Convert "HH:mm" 24h → "h:mm AM/PM" */
+const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+export function isValidTimeString(time: string | undefined | null): boolean {
+  if (!time || typeof time !== 'string') return false;
+  return TIME_REGEX.test(time.trim());
+}
+
+export function normalizeTimeString(time: string | undefined | null): string {
+  const normalized = typeof time === 'string' ? time.trim() : '';
+  if (!isValidTimeString(normalized)) {
+    return '00:00';
+  }
+  return normalized;
+}
+
+export function toMinutes(time: string): number {
+  const normalized = normalizeTimeString(time);
+  const [hStr, mStr] = normalized.split(':');
+  const h = Number(hStr);
+  const m = Number(mStr);
+  if (Number.isNaN(h) || Number.isNaN(m)) return 0;
+  return h * 60 + m;
+}
+
+export function fromMinutes(minutes: number): string {
+  if (!Number.isFinite(minutes) || minutes < 0) minutes = 0;
+  const normalized = Math.floor(minutes % (24 * 60));
+  const h = Math.floor(normalized / 60);
+  const m = normalized % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
 export function formatTime12h(time: string): string {
-  const [hStr, mStr] = time.split(':');
+  const normalized = normalizeTimeString(time);
+  const [hStr, mStr] = normalized.split(':');
   let h = parseInt(hStr, 10);
   const m = parseInt(mStr, 10);
+  if (Number.isNaN(h) || Number.isNaN(m)) {
+    return '12:00 AM';
+  }
   const period = h >= 12 ? 'PM' : 'AM';
   h = h % 12 || 12;
   return `${h}:${String(m).padStart(2, '0')} ${period}`;
 }
 
 export function parseTime(time: string): Date {
-  return parse(time, 'HH:mm', new Date());
+  const normalized = normalizeTimeString(time);
+  return parse(normalized, 'HH:mm', new Date());
 }
 
 export function parseTimeInTimezone(time: string, timezone: string): Date {

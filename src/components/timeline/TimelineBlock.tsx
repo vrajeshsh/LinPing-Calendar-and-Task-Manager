@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { TimeBlock } from '@/types';
 import { cn } from '@/lib/utils';
 import { parseTime, formatTime12h, formatMinutes, getBlockColor } from '@/lib/scheduleHelpers';
-import { CheckCircle2, Lock, Unlock, XCircle, Timer, Clock, Play, Pencil, X, Check } from 'lucide-react';
+import { CheckCircle2, XCircle, Timer, Clock, Play, Pencil, X, Check } from 'lucide-react';
 import { differenceInMinutes } from 'date-fns';
 import { useScheduleStore } from '@/store/useScheduleStore';
 import { RescheduleExplanation } from './RescheduleExplanation';
@@ -43,10 +43,6 @@ interface Props {
   date: string;
   isTodaySchedule?: boolean;
 }
-
-const FIXED_TITLES = ['sleep', 'office', 'gym'];
-const isFixedBlock = (b: TimeBlock) =>
-  b.type === 'fixed' || FIXED_TITLES.some(t => b.title.toLowerCase().includes(t));
 
 // ─── Inline Block Edit Modal ────────────────────────────────────────────────
 function BlockEditModal({ block, date, onClose }: { block: TimeBlock; date: string; onClose: () => void }) {
@@ -129,19 +125,21 @@ export function TimelineBlock({ block, isActive, isPast, now, date, isTodaySched
     }
   }
 
-  const duration = differenceInMinutes(end, start);
-  const elapsed = isActive ? differenceInMinutes(now, start) : (isPast ? duration : 0);
-  const progress = Math.min(100, Math.max(0, (elapsed / duration) * 100));
+  const rawDuration = differenceInMinutes(end, start);
+  const duration = Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 30;
+  const elapsedRaw = isActive ? differenceInMinutes(now, start) : (isPast ? duration : 0);
+  const elapsed = Number.isFinite(elapsedRaw) && elapsedRaw >= 0 ? Math.min(elapsedRaw, duration) : 0;
+  const progress = duration > 0 ? Math.min(100, Math.max(0, (elapsed / duration) * 100)) : 0;
 
   const handleStatus = (status: TimeBlock['status']) => updateBlockStatus(date, block.id, status);
 
   const handleDelay = (minutes: number) => {
     const schedule = schedules[date];
-    if (!schedule || isFixedBlock(block)) return;
+    if (!schedule) return;
     const addMs = minutes * 60 * 1000;
     const updated = schedule.blocks.map(b => {
       const bStart = parseTime(b.startTime);
-      if (b.id === block.id || (bStart >= start && !isFixedBlock(b))) {
+      if (b.id === block.id || bStart >= start) {
         const ns = new Date(parseTime(b.startTime).getTime() + addMs);
         const ne = new Date(parseTime(b.endTime).getTime() + addMs);
         const fmt = (d: Date) => d.toTimeString().slice(0, 5);
@@ -155,7 +153,6 @@ export function TimelineBlock({ block, isActive, isPast, now, date, isTodaySched
   const isCompleted = block.status === 'completed';
   const isSkipped = block.status === 'skipped';
   const isDelayed = block.status === 'delayed';
-  const blockIsFixed = isFixedBlock(block);
 
   const durLabel = duration >= 60
     ? `${Math.floor(duration / 60)} H${duration % 60 > 0 ? ` ${duration % 60} M` : ''}`
@@ -213,10 +210,6 @@ export function TimelineBlock({ block, isActive, isPast, now, date, isTodaySched
                     isCompleted ? "text-muted-foreground/50 line-through" : "text-foreground",
                     isSkipped && "text-muted-foreground/35 line-through"
                   )}>{block.title}</h3>
-                  {blockIsFixed
-                    ? <span title="Fixed — cannot be moved"><Lock className="w-3 h-3 text-amber-500/60 shrink-0" /></span>
-                    : <span title="Flexible block"><Unlock className="w-3 h-3 text-muted-foreground/25 shrink-0" /></span>
-                  }
                   {isDelayed && (
                     <span className="text-[9px] font-black tracking-widest uppercase text-amber-500 px-1.5 py-0.5 bg-amber-500/10 rounded-md">Delayed</span>
                   )}
@@ -226,7 +219,6 @@ export function TimelineBlock({ block, isActive, isPast, now, date, isTodaySched
                 </div>
                 <p className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
                   <Clock className="w-3 h-3" />{durLabel}
-                  {!blockIsFixed && <><span className="text-border/50">·</span><span className="text-primary/45 text-[11px] font-medium">flexible</span></>}
                 </p>
                 
                 {/* Reschedule explanation - shows when task was moved by AI */}
@@ -265,7 +257,7 @@ export function TimelineBlock({ block, isActive, isPast, now, date, isTodaySched
                   <CheckCircle2 className="w-[17px] h-[17px]" />
                 </button>
                 {/* Skip */}
-                {!isCompleted && !blockIsFixed && (
+                {!isCompleted && (
                   <button
                     onClick={() => handleStatus('skipped')}
                     title="Skip block"
@@ -287,18 +279,16 @@ export function TimelineBlock({ block, isActive, isPast, now, date, isTodaySched
                 <span className="text-[10px] font-medium text-primary/60 uppercase tracking-wider">
                   {formatMinutes(Math.floor(elapsed))} done · {formatMinutes(Math.floor(duration - elapsed))} left
                 </span>
-                {!blockIsFixed && (
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                      <Timer className="w-3 h-3" />Delay:
-                    </span>
-                    {[5, 15, 30, 60].map(m => (
-                      <button key={m} onClick={() => handleDelay(m)} title={`Delay ${m}M`}
-                        className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 transition-all active:scale-95"
-                      >{m < 60 ? `+${m}M` : '+1H'}</button>
-                    ))}
-                  </div>
-                )}
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                    <Timer className="w-3 h-3" />Delay:
+                  </span>
+                  {[5, 15, 30, 60].map(m => (
+                    <button key={m} onClick={() => handleDelay(m)} title={`Delay ${m}M`}
+                      className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 transition-all active:scale-95"
+                    >{m < 60 ? `+${m}M` : '+1H'}</button>
+                  ))}
+                </div>
               </div>
             )}
 
